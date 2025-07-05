@@ -83,7 +83,6 @@ func GetUser(c *fiber.Ctx) error {
 }
 
 func GetAllUsers(c *fiber.Ctx) error {
-	fmt.Println("GetAllUsers")
 	var users []entity.User
 	if err := config.DB.Preload("Role").Find(&users).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": err.Error()})
