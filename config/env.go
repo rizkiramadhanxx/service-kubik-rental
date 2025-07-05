@@ -23,4 +23,5 @@ func LoadEnv() {
 	}
 
 	JWTSecret = []byte(secret)
+
 }
