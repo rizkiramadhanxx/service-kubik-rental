@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"kubik-rental/config"
+	"kubik-rental/dto"
 	"kubik-rental/entity"
 	"kubik-rental/pkg"
+	"strconv"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -55,11 +57,38 @@ func CreateRole(c *fiber.Ctx) error {
 }
 
 func GetAllRoles(c *fiber.Ctx) error {
-	var roles []entity.Role
-	if err := config.DB.Find(&roles).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": err.Error()})
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	Limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	if page < 1 {
+		page = 1
 	}
-	return c.JSON(roles)
+
+	if Limit < 1 {
+		Limit = 10
+	}
+
+	offset := (page - 1) * Limit
+
+	var total int64
+	if err := config.DB.Model(&entity.Role{}).Count(&total).Error; err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
+	}
+	var roles []entity.Role
+	if err := config.DB.Find(&roles).Offset(offset).Limit(Limit).Error; err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dto.Response[[]entity.Role]{
+		Status:  fiber.StatusOK,
+		Data:    roles,
+		Message: "Success get all roles",
+		Meta: &dto.Meta{
+			Page:      page,
+			Limit:     Limit,
+			Total:     int(total),
+			TotalPage: int(total) / Limit,
+		},
+	})
 }
 
 func GetRoleByID(c *fiber.Ctx) error {
