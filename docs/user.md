@@ -2,13 +2,13 @@
 
 ## Base URL
 
-`/users`
+`/user`
 
 ---
 
 ## 📌 Create User
 
-**POST** `/users`
+**POST** `/user`
 
 ### Headers
 
@@ -61,7 +61,7 @@
 
 ## 📌 Get All Users
 
-**GET** `/users`
+**GET** `/user`
 
 ### Success Response
 
@@ -86,7 +86,7 @@
 
 ## 📌 Get User by ID
 
-**GET** `/users/:id`
+**GET** `/user/:id`
 
 ### Success Response
 
@@ -114,7 +114,7 @@
 
 ## 📌 Update User
 
-**PUT** `/users/:id`
+**PUT** `/user/:id`
 
 ### Request Body
 
@@ -142,7 +142,7 @@
 
 ## 📌 Delete User
 
-**DELETE** `/users/:id`
+**DELETE** `/user/:id`
 
 ### Success Response
 
