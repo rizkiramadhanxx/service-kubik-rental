@@ -16,3 +16,10 @@ type UserResponse struct {
 	Role     entity.Role `json:"role"`
 	Username string      `json:"username"`
 }
+
+type UpdateUserRequest struct {
+	Name     string `json:"name" validate:"required"`
+	Username string `json:"username" validate:"required"`
+	RoleID   uint   `json:"role_id" validate:"required"`
+	Password string `json:"password"`
+}

@@ -45,18 +45,20 @@ func main() {
 	// database
 	config.InitDB()
 	RunMigration()
+	if err := config.SeedAdmin(); err != nil {
+		log.Fatal("Seeding admin failed:", err)
+	}
 
 	// routes
-	api := app.Group("/api")
-	user.SetupRoutes(api.Group("/user"))
-	role.SetupRoutes(api.Group("/role"))
-	auth.SetupRoutes(api.Group("/auth"))
-	device.SetupRoutes(api.Group("/device"))
-	member.SetupRoutes(api.Group("/member"))
-	product.SetupRoutes(api.Group("/product"))
+	user.SetupRoutes(app.Group("/user"))
+	role.SetupRoutes(app.Group("/role"))
+	auth.SetupRoutes(app.Group("/auth"))
+	device.SetupRoutes(app.Group("/device"))
+	member.SetupRoutes(app.Group("/member"))
+	product.SetupRoutes(app.Group("/product"))
 
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello, World!")
+	app.Get("/health-check", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
 	app.Get("/status-adb", func(c *fiber.Ctx) error {

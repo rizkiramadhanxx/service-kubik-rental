@@ -7,14 +7,14 @@ import (
 )
 
 func SetupRoutes(router fiber.Router) {
-	route := router.Use(
+	router.Use(
 		middleware.Authentication(),
 		middleware.RequireModuleAccess("user"),
 	)
 
-	route.Get("/", GetAllUsers)
-	route.Post("/", CreateUser)
-	route.Get("/:id", GetUser)
-	route.Put("/:id", UpdateUser)
-	route.Delete("/:id", DeleteUser)
+	router.Get("/", GetAllUsers)
+	router.Get("/:id", GetUser)
+	router.Post("/", CreateUser)
+	router.Patch("/:id", UpdateUser)
+	router.Delete("/:id", DeleteUser)
 }
