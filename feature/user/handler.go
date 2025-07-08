@@ -158,7 +158,10 @@ func UpdateUser(c *fiber.Ctx) error {
 
 	var input dto.UpdateUserRequest
 	if err := c.BodyParser(&input); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Validation failed", "errors": pkg.FormatValidationError(err)})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Validation failed",
+			"errors":  pkg.FormatValidationError(err),
+		})
 	}
 
 	// validate role
@@ -166,21 +169,24 @@ func UpdateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Role not found"})
 	}
 
-	// hash password baru
-	hashed, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Failed to hash password"})
-	}
-
 	user.Name = input.Name
-	user.Password = string(hashed)
+	user.Username = input.Username
 	user.RoleID = input.RoleID
+
+	// hanya update password jika field dikirim dari FE
+	if input.Password != nil {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Failed to hash password"})
+		}
+		user.Password = string(hashed)
+	}
 
 	if err := config.DB.Save(&user).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": err.Error()})
 	}
 
-	return c.JSON(fiber.Map{"message": "User updated successfully"})
+	return c.JSON(dto.Response[dto.UserResponse]{Status: fiber.StatusOK, Data: dto.UserResponse{ID: user.ID, Name: user.Name, Username: user.Username, RoleID: user.RoleID, Role: user.Role}, Message: "User updated successfully"})
 }
 
 func DeleteUser(c *fiber.Ctx) error {

@@ -18,8 +18,8 @@ type UserResponse struct {
 }
 
 type UpdateUserRequest struct {
-	Name     string `json:"name" validate:"required"`
-	Username string `json:"username" validate:"required"`
-	RoleID   uint   `json:"role_id" validate:"required"`
-	Password string `json:"password"`
+	Name     string  `json:"name" validate:"required"`
+	Username string  `json:"username" validate:"required"`
+	RoleID   uint    `json:"role_id" validate:"required"`
+	Password *string `json:"password" validate:"omitempty,min=5"` // pointer
 }
