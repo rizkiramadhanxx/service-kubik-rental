@@ -5,6 +5,11 @@ const (
 	ModuleSetting     = "setting"
 	ModuleRole        = "role"
 	ModuleTransaction = "transaction"
+	ModuleCategory    = "category"
+	ModuleProduct     = "product"
+	ModuleDevice      = "device"
+	ModuleBilling     = "billing"
+	ModuleMember      = "member"
 )
 
 var AllModules = []string{
@@ -12,6 +17,11 @@ var AllModules = []string{
 	ModuleSetting,
 	ModuleRole,
 	ModuleTransaction,
+	ModuleCategory,
+	ModuleProduct,
+	ModuleDevice,
+	ModuleBilling,
+	ModuleMember,
 }
 
 type Role struct {

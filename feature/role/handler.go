@@ -122,8 +122,6 @@ func UpdateRole(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 
-	fmt.Println(input)
-
 	// Validate JSON format and enum
 	var parsedModules []string
 	if err := json.Unmarshal([]byte(input.Modules), &parsedModules); err != nil {
@@ -151,10 +149,17 @@ func UpdateRole(c *fiber.Ctx) error {
 
 func DeleteRole(c *fiber.Ctx) error {
 	id := c.Params("id")
-	if err := config.DB.Delete(&entity.Role{}, id).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": err.Error()})
+	result := config.DB.Delete(&entity.Role{}, id)
+
+	if result.Error != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": result.Error.Error()})
 	}
-	return c.JSON(fiber.Map{"message": "Role deleted successfully"})
+
+	if result.RowsAffected == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"message": "Role not found"})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Role deleted successfully"})
 }
 
 func getAllModule(c *fiber.Ctx) error {

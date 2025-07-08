@@ -15,7 +15,7 @@ import (
 )
 
 func CreateUser(c *fiber.Ctx) error {
-	var input dto.CreateUserRequest
+	var input CreateUserRequest
 
 	if err := c.BodyParser(&input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
@@ -55,7 +55,7 @@ func CreateUser(c *fiber.Ctx) error {
 	// preload role
 	config.DB.Preload("Role").First(&newUser, newUser.ID)
 
-	response := dto.UserResponse{
+	response := UserResponse{
 		ID:     newUser.ID,
 		Name:   newUser.Name,
 		RoleID: newUser.RoleID,
@@ -74,7 +74,7 @@ func GetUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"message": "User not found"})
 	}
 
-	response := dto.UserResponse{
+	response := UserResponse{
 		ID:       user.ID,
 		Name:     user.Name,
 		RoleID:   user.RoleID,
@@ -82,7 +82,7 @@ func GetUser(c *fiber.Ctx) error {
 		Username: user.Username,
 	}
 
-	return c.Status(fiber.StatusOK).JSON(dto.Response[dto.UserResponse]{Status: fiber.StatusOK, Data: response, Message: "User found"})
+	return c.Status(fiber.StatusOK).JSON(dto.Response[UserResponse]{Status: fiber.StatusOK, Data: response, Message: "User found"})
 }
 
 func GetAllUsers(c *fiber.Ctx) error {
@@ -117,9 +117,9 @@ func GetAllUsers(c *fiber.Ctx) error {
 	}
 
 	// Mapping ke DTO
-	response := make([]dto.UserResponse, len(users))
+	response := make([]UserResponse, len(users))
 	for i, user := range users {
-		response[i] = dto.UserResponse{
+		response[i] = UserResponse{
 			ID:       user.ID,
 			Name:     user.Name,
 			RoleID:   user.RoleID,
@@ -140,7 +140,7 @@ func GetAllUsers(c *fiber.Ctx) error {
 	}
 
 	// Final JSON response
-	return c.Status(fiber.StatusOK).JSON(dto.Response[[]dto.UserResponse]{
+	return c.Status(fiber.StatusOK).JSON(dto.Response[[]UserResponse]{
 		Status:  fiber.StatusOK,
 		Message: "Users retrieved successfully",
 		Data:    response,
@@ -156,7 +156,7 @@ func UpdateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"message": "User not found"})
 	}
 
-	var input dto.UpdateUserRequest
+	var input UpdateUserRequest
 	if err := c.BodyParser(&input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"message": "Validation failed",
@@ -186,7 +186,7 @@ func UpdateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": err.Error()})
 	}
 
-	return c.JSON(dto.Response[dto.UserResponse]{Status: fiber.StatusOK, Data: dto.UserResponse{ID: user.ID, Name: user.Name, Username: user.Username, RoleID: user.RoleID, Role: user.Role}, Message: "User updated successfully"})
+	return c.JSON(dto.Response[UserResponse]{Status: fiber.StatusOK, Data: UserResponse{ID: user.ID, Name: user.Name, Username: user.Username, RoleID: user.RoleID, Role: user.Role}, Message: "User updated successfully"})
 }
 
 func DeleteUser(c *fiber.Ctx) error {

@@ -8,8 +8,8 @@ type Product struct {
 	SKU        string    `json:"sku"`
 	Price      float64   `json:"price"`
 	Stock      int       `json:"stock"`
-	CategoryID uint      `json:"category_id"`
-	Category   Category  `gorm:"foreignKey:CategoryID" json:"category"`
+	CategoryID *uint     `gorm:"default:null" json:"category_id"`
+	Category   *Category `gorm:"foreignKey:CategoryID" json:"category,omitempty"` // ← pointer + bisa null
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

@@ -12,6 +12,7 @@ import (
 	"kubik-rental/config"
 	"kubik-rental/entity"
 	"kubik-rental/feature/auth"
+	"kubik-rental/feature/category"
 	"kubik-rental/feature/device"
 	"kubik-rental/feature/member"
 	"kubik-rental/feature/product"
@@ -22,10 +23,13 @@ import (
 
 func RunMigration() {
 	err := config.DB.AutoMigrate(
-		&entity.User{}, &entity.Role{}, &entity.Device{},
+		&entity.User{},
+		&entity.Role{},
+		&entity.Product{},
+		&entity.Category{},
+		&entity.Device{},
 		&entity.Billing{},
 		&entity.Member{},
-		&entity.Product{},
 	)
 	if err != nil {
 		log.Fatal("Failed to run migrations:", err)
@@ -52,10 +56,11 @@ func main() {
 	// routes
 	user.SetupRoutes(app.Group("/user"))
 	role.SetupRoutes(app.Group("/role"))
+	product.SetupRoutes(app.Group("/product"))
+	category.SetupRoutes(app.Group("/category"))
 	auth.SetupRoutes(app.Group("/auth"))
 	device.SetupRoutes(app.Group("/device"))
 	member.SetupRoutes(app.Group("/member"))
-	product.SetupRoutes(app.Group("/product"))
 
 	app.Get("/health-check", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
