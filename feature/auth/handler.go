@@ -9,11 +9,18 @@ import (
 
 	"kubik-rental/config"
 	"kubik-rental/entity"
+	"kubik-rental/pkg"
 )
 
 type LoginInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+type RegisterInput struct {
+	Name     string `json:"name" validate:"required"`
+	Username string `json:"username" validate:"required,min=4,alphanum"`
+	Password string `json:"password" validate:"required,min=6"`
 }
 
 func Login(c *fiber.Ctx) error {
@@ -50,8 +57,49 @@ func Login(c *fiber.Ctx) error {
 		"user": fiber.Map{
 			"id":       u.ID,
 			"name":     u.Name,
-			"role":     u.Role.Name,
+			"role":     u.Role,
 			"username": u.Username,
 		},
 	})
+}
+
+func Register(c *fiber.Ctx) error {
+	var input RegisterInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Invalid input"})
+	}
+
+	// validasi input
+	if err := pkg.Validate.Struct(input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Validation failed",
+			"error":   pkg.FormatValidationError(err),
+			"status":  fiber.StatusBadRequest,
+		})
+	}
+
+	// check if username already exists
+	var u entity.User
+	if err := config.DB.Where("username = ?", input.Username).First(&u).Error; err == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Username already exists"})
+	}
+
+	pkg.Validate.Struct(input)
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Failed to hash password"})
+	}
+
+	newUser := entity.User{
+		Name:     input.Name,
+		Username: input.Username,
+		Password: string(hashed),
+	}
+
+	if err := config.DB.Create(&newUser).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Failed to create user"})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "User created successfully"})
 }

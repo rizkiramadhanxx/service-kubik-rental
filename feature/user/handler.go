@@ -66,6 +66,7 @@ func CreateUser(c *fiber.Ctx) error {
 }
 
 func GetUser(c *fiber.Ctx) error {
+
 	id := c.Params("id")
 	var user entity.User
 
@@ -88,6 +89,8 @@ func GetAllUsers(c *fiber.Ctx) error {
 	// Ambil query param
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	keyword := c.Query("keyword", "")
+
 	if page < 1 {
 		page = 1
 	}
@@ -106,7 +109,7 @@ func GetAllUsers(c *fiber.Ctx) error {
 	}
 
 	var users []entity.User
-	if err := config.DB.Preload("Role").Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+	if err := config.DB.Preload("Role").Limit(limit).Offset(offset).Where("name LIKE ?", "%"+keyword+"%").Find(&users).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
 			Message: err.Error(),
@@ -153,21 +156,13 @@ func UpdateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"message": "User not found"})
 	}
 
-	var input entity.User
+	var input dto.UpdateUserRequest
 	if err := c.BodyParser(&input); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
-	}
-
-	if err := pkg.Validate.Struct(input); err != nil {
-		errors := make(map[string]string)
-		for _, e := range err.(validator.ValidationErrors) {
-			errors[e.Field()] = fmt.Sprintf("Field %s %s", e.Field(), e.Tag())
-		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Validation failed", "errors": errors})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Validation failed", "errors": pkg.FormatValidationError(err)})
 	}
 
 	// validate role
-	if err := config.DB.First(&entity.Role{}, input.Role).Error; err != nil {
+	if err := config.DB.First(&entity.Role{}, input.RoleID).Error; err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Role not found"})
 	}
 
@@ -179,7 +174,7 @@ func UpdateUser(c *fiber.Ctx) error {
 
 	user.Name = input.Name
 	user.Password = string(hashed)
-	user.Role = input.Role
+	user.RoleID = input.RoleID
 
 	if err := config.DB.Save(&user).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": err.Error()})
