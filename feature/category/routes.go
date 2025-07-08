@@ -16,6 +16,6 @@ func SetupRoutes(router fiber.Router) {
 	route.Get("/", GetAllCategories)
 	route.Get("/:id", GetCategoryByID)
 	route.Post("/", CreateCategory)
-	route.Put("/:id", UpdateCategory)
+	route.Patch("/:id", UpdateCategory)
 	route.Delete("/:id", DeleteCategory)
 }
