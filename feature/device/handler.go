@@ -24,6 +24,7 @@ func isValidAction(action string) bool {
 func GetAllDevices(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
+	keyword := c.Query("keyword", "")
 
 	if page < 1 {
 		page = 1
@@ -34,9 +35,16 @@ func GetAllDevices(c *fiber.Ctx) error {
 
 	offset := (page - 1) * limit
 
+	query := config.DB.Model(&entity.Device{})
+
+	if keyword != "" {
+		likeKeyword := "%" + keyword + "%"
+		query = query.Where("name LIKE ? OR ip LIKE ?", likeKeyword, likeKeyword)
+	}
+
 	// Hitung total data
 	var total int64
-	if err := config.DB.Model(&entity.Device{}).Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
 			Message: err.Error(),
@@ -45,19 +53,16 @@ func GetAllDevices(c *fiber.Ctx) error {
 
 	// Ambil data paginated
 	var devices []entity.Device
-	if err := config.DB.Limit(limit).Offset(offset).Find(&devices).Error; err != nil {
+	if err := query.Limit(limit).Offset(offset).Find(&devices).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
 			Message: err.Error(),
 		})
 	}
 
-	// Hitung total halaman (jika limit > 0)
 	totalPages := 0
 	if total > 0 {
 		totalPages = int(math.Ceil(float64(total) / float64(limit)))
-
-		fmt.Println(totalPages)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(dto.Response[[]entity.Device]{
@@ -79,6 +84,7 @@ func GetDevice(c *fiber.Ctx) error {
 	if err := config.DB.First(&device, id).Error; err != nil {
 		return c.Status(404).JSON(fiber.Map{"message": "Device not found"})
 	}
+
 	return c.Status(fiber.StatusOK).JSON(dto.Response[entity.Device]{
 		Status:  fiber.StatusOK,
 		Data:    device,
@@ -146,14 +152,20 @@ func PingDevice(c *fiber.Ctx) error {
 }
 
 func CreateDevice(c *fiber.Ctx) error {
-	var device entity.Device
+	var device CreateDeviceRequest
 	if err := c.BodyParser(&device); err != nil {
 		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
+
+	// validate
+	if err := pkg.Validate.Struct(device); err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": "Invalid request body", "errors": pkg.FormatValidationError(err)})
+	}
+
 	if err := config.DB.Create(&device).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{"message": err.Error()})
 	}
-	return c.Status(201).JSON(device)
+	return c.Status(201).JSON(fiber.Map{"message": "Device created successfully", "status": fiber.StatusCreated})
 }
 
 func UpdateDevice(c *fiber.Ctx) error {
@@ -171,13 +183,26 @@ func UpdateDevice(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"message": err.Error()})
 	}
 
-	return c.JSON(device)
+	return c.JSON(fiber.Map{"message": "Device updated successfully", "status": fiber.StatusOK})
 }
 
 func DeleteDevice(c *fiber.Ctx) error {
 	id := c.Params("id")
-	if err := config.DB.Delete(&entity.Device{}, id).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"message": err.Error()})
+	result := config.DB.Delete(&entity.Device{}, id)
+
+	if result.Error != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: result.Error.Error(),
+		})
 	}
-	return c.SendStatus(204)
+
+	if result.RowsAffected == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
+			Status:  fiber.StatusNotFound,
+			Message: "Device not found",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Device deleted successfully", "status": fiber.StatusOK})
 }
