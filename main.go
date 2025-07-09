@@ -15,6 +15,7 @@ import (
 	"kubik-rental/feature/category"
 	"kubik-rental/feature/device"
 	"kubik-rental/feature/member"
+	package_bill "kubik-rental/feature/package"
 	"kubik-rental/feature/product"
 	"kubik-rental/feature/role"
 	"kubik-rental/feature/user"
@@ -28,6 +29,7 @@ func RunMigration() {
 		&entity.Product{},
 		&entity.Category{},
 		&entity.Device{},
+		&entity.Package{},
 		&entity.Billing{},
 		&entity.Member{},
 	)
@@ -61,6 +63,7 @@ func main() {
 	auth.SetupRoutes(app.Group("/auth"))
 	device.SetupRoutes(app.Group("/device"))
 	member.SetupRoutes(app.Group("/member"))
+	package_bill.SetupRoutes(app.Group("/package"))
 
 	app.Get("/health-check", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})

@@ -57,6 +57,7 @@ func GetAllProducts(c *fiber.Ctx) error {
 	limit := c.QueryInt("limit", 10)
 	page := c.QueryInt("page", 1)
 	keyword := c.Query("keyword", "")
+	category := c.Query("category", "")
 
 	if page < 1 {
 		page = 1
@@ -66,19 +67,30 @@ func GetAllProducts(c *fiber.Ctx) error {
 	}
 	offset := (page - 1) * limit
 
+	// Build base query
+	query := config.DB.Model(&entity.Product{}).Preload("Category")
+
+	// Conditionally add filters (mirip "keyword || undefined")
+	if keyword != "" {
+		query = query.Where("name LIKE ?", "%"+keyword+"%")
+	}
+	if category != "" {
+		query = query.Where("category_id = ?", category)
+	}
+
+	// Hitung total
 	var total int64
-	if err := config.DB.Model(&entity.Product{}).Where("name LIKE ?", "%"+keyword+"%").Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 
+	// Ambil data
 	var products []entity.Product
-	if err := config.DB.Preload("Category").Where("name LIKE ?", "%"+keyword+"%").
-		Limit(limit).
-		Offset(offset).
-		Find(&products).Error; err != nil {
+	if err := query.Limit(limit).Offset(offset).Find(&products).Error; err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
 	}
 
+	// Format response
 	var productResponses []GetProductResponse
 	for _, p := range products {
 		productResponses = append(productResponses, GetProductResponse{
@@ -92,7 +104,6 @@ func GetAllProducts(c *fiber.Ctx) error {
 	}
 
 	totalPage := int(math.Ceil(float64(total) / float64(limit)))
-
 	meta := dto.Meta{
 		Page:      page,
 		Limit:     limit,
