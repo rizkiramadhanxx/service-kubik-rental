@@ -10,6 +10,6 @@ type Meta struct {
 type Response[T any] struct {
 	Message string `json:"message"`
 	Status  int    `json:"status"`
-	Data    T      `json:"data,omitempty"`
+	Data    T      `json:"data"`
 	Meta    *Meta  `json:"meta,omitempty"`
 }

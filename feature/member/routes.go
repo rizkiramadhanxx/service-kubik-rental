@@ -9,7 +9,7 @@ import (
 func SetupRoutes(router fiber.Router) {
 	route := router.Use(
 		middleware.Authentication(),
-		middleware.RequireModuleAccess("user"),
+		middleware.RequireModuleAccess("member"),
 	)
 
 	route.Get("/", GetAllMembers)

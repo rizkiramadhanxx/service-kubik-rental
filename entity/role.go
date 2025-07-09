@@ -10,6 +10,7 @@ const (
 	ModuleDevice      = "device"
 	ModuleBilling     = "billing"
 	ModuleMember      = "member"
+	ModulePackage     = "package"
 )
 
 var AllModules = []string{
@@ -22,6 +23,7 @@ var AllModules = []string{
 	ModuleDevice,
 	ModuleBilling,
 	ModuleMember,
+	ModulePackage,
 }
 
 type Role struct {
