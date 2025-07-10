@@ -91,7 +91,7 @@ func GetAllProducts(c *fiber.Ctx) error {
 	}
 
 	// Format response
-	var productResponses []GetProductResponse
+	productResponses := make([]GetProductResponse, 0, len(products)) // pastikan tidak nil
 	for _, p := range products {
 		productResponses = append(productResponses, GetProductResponse{
 			ID:       p.ID,
