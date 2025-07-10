@@ -151,19 +151,78 @@ func PingDevice(c *fiber.Ctx) error {
 	})
 }
 
+func PingMultipleDevices(c *fiber.Ctx) error {
+	var req PingMultipleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Invalid request body",
+		})
+	}
+
+	if err := pkg.Validate.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Validation failed",
+			"error":   pkg.FormatValidationError(err),
+		})
+	}
+
+	var results []map[string]interface{}
+
+	for _, id := range req.IDs {
+		var device entity.Device
+		if err := config.DB.First(&device, id).Error; err != nil {
+			results = append(results, map[string]interface{}{
+				"id":             id,
+				"isReachable":    false,
+				"isAdbConnected": false,
+				"error":          "Device not found",
+			})
+			continue
+		}
+
+		isReachable := pkg.PingIP(device.IP)
+		isAdbConnected := pkg.CheckAdbConnected(device.IP)
+
+		results = append(results, map[string]interface{}{
+			"id":             device.ID,
+			"ip":             device.IP,
+			"name":           device.Name,
+			"isReachable":    isReachable,
+			"isAdbConnected": isAdbConnected,
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dto.Response[any]{
+		Status:  fiber.StatusOK,
+		Message: "Success ping multiple devices",
+		Data:    results,
+	})
+}
+
 func CreateDevice(c *fiber.Ctx) error {
 	var device CreateDeviceRequest
 	if err := c.BodyParser(&device); err != nil {
-		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Invalid request body",
+			"errors":  pkg.FormatValidationError(err),
+			"status":  fiber.StatusBadRequest,
+		})
 	}
 
-	// validate
 	if err := pkg.Validate.Struct(device); err != nil {
-		return c.Status(400).JSON(fiber.Map{"message": "Invalid request body", "errors": pkg.FormatValidationError(err)})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Validation error",
+			"errors":  pkg.FormatValidationError(err),
+		})
 	}
 
-	if err := config.DB.Create(&device).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"message": err.Error()})
+	newDevice := entity.Device{
+		Name: device.Name,
+		IP:   device.IP,
+	}
+
+	if err := config.DB.Create(&newDevice).Error; err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
 	return c.Status(201).JSON(fiber.Map{"message": "Device created successfully", "status": fiber.StatusCreated})
 }

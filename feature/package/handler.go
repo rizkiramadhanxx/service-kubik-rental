@@ -1,7 +1,6 @@
 package package_bill
 
 import (
-	"fmt"
 	"kubik-rental/config"
 	"kubik-rental/dto"
 	"kubik-rental/entity"
@@ -98,8 +97,6 @@ func GetAllPackages(c *fiber.Ctx) error {
 			UpdatedAt: p.UpdatedAt,
 		})
 	}
-
-	fmt.Print(result)
 
 	meta := dto.Meta{
 		Page:      page,

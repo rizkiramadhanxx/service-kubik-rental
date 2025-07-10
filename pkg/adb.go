@@ -1,9 +1,11 @@
 package pkg
 
 import (
+	"bytes"
 	"fmt"
 	"kubik-rental/dto"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -11,8 +13,10 @@ func ExecuteAdbAction(ip, action string) error {
 	var cmd *exec.Cmd
 
 	switch action {
-	case dto.ActionOff, dto.ActionOn:
+	case dto.ActionOff:
 		cmd = exec.Command("embed/platform-tools/adb.exe", "-s", ip, "shell", "input", "keyevent", "26")
+	case dto.ActionOn:
+		cmd = exec.Command("embed/platform-tools/adb.exe", "-s", ip, "shell", "input", "keyevent", "224")
 	case dto.ActionVolumeUp:
 		cmd = exec.Command("embed/platform-tools/adb.exe", "-s", ip, "shell", "input", "keyevent", "24")
 	case dto.ActionVolumeDown:
@@ -44,11 +48,29 @@ func CheckAdbConnected(ip string) bool {
 }
 
 func PingIP(ip string) bool {
-	cmd := exec.Command("ping", "-n", "1", ip) // Untuk Windows
-	// Untuk Linux/Mac pakai: exec.Command("ping", "-c", "1", ip)
+	var cmd *exec.Cmd
+
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("ping", "-n", "1", ip)
+	} else {
+		cmd = exec.Command("ping", "-c", "1", ip)
+	}
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
 
 	if err := cmd.Run(); err != nil {
 		return false
 	}
-	return true
+
+	output := out.String()
+
+	if runtime.GOOS == "windows" {
+		// Cek TTL untuk Windows
+		return strings.Contains(output, "TTL=")
+	} else {
+		// Cek bytes from untuk Linux/Mac
+		return strings.Contains(output, "bytes from")
+	}
 }

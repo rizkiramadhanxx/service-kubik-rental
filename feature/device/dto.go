@@ -5,6 +5,10 @@ type CreateDeviceRequest struct {
 	Name string `json:"name" validate:"required,min=3"`
 }
 
+type PingMultipleRequest struct {
+	IDs []uint `json:"ids" validate:"required,dive,gt=0"`
+}
+
 type UpdateDeviceRequest struct {
 	IP   string `json:"ip" validate:"required,ip"`
 	Name string `json:"name" validate:"required,min=3"`
