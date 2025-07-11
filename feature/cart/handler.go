@@ -16,16 +16,16 @@ import (
 func CreateCart(c *fiber.Ctx) error {
 	var input entity.Cart
 	if err := c.BodyParser(&input); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"Status":  fiber.StatusBadRequest,
-			"Message": "Invalid request body",
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Invalid request body",
 		})
 	}
 
 	if err := config.DB.Create(&input).Error; err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"Status":  fiber.StatusBadRequest,
-			"Message": "Failed to create cart",
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Failed to create cart",
 		})
 	}
 
@@ -63,8 +63,11 @@ func GetAllCarts(c *fiber.Ctx) error {
 
 	var carts []entity.Cart
 	if err := query.
+		Preload("CartItems").
 		Preload("CartItems.Product").
-		Preload("CartItems.Package").
+		Preload("CartItems.Billing").
+		Preload("CartItems.Billing.Package").
+		Preload("CartItems.Billing.Device").
 		Limit(limit).
 		Offset(offset).
 		Find(&carts).Error; err != nil {
@@ -115,8 +118,11 @@ func GetCartByID(c *fiber.Ctx) error {
 	id := c.Params("id")
 
 	var cart entity.Cart
-	err := config.DB.Preload("CartItems.Product").
-		Preload("CartItems.Package").
+	err := config.DB.Preload("CartItems").
+		Preload("CartItems.Product").
+		Preload("CartItems.Billing").
+		Preload("CartItems.Billing.Package").
+		Preload("CartItems.Billing.Device").
 		First(&cart, id).Error
 
 	if err != nil {
@@ -126,8 +132,8 @@ func GetCartByID(c *fiber.Ctx) error {
 				Message: "Cart not found",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
 			Message: "Failed to retrieve cart",
 		})
 	}
@@ -243,8 +249,8 @@ func AddCartItem(c *fiber.Ctx) error {
 
 	if input.ItemType == "product" && input.ProductID != nil {
 		lookup = lookup.Where("product_id = ?", input.ProductID)
-	} else if input.ItemType == "billing" && input.PackageID != nil {
-		lookup = lookup.Where("package_id = ?", input.PackageID)
+	} else if input.ItemType == "billing" && input.BillingID != nil {
+		lookup = lookup.Where("billing_id = ?", input.BillingID)
 	} else {
 		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
 			Status:  fiber.StatusBadRequest,
@@ -258,8 +264,8 @@ func AddCartItem(c *fiber.Ctx) error {
 			Message: "Item already exists in the cart",
 		})
 	} else if err != gorm.ErrRecordNotFound {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
 			Message: "Failed to check existing cart item",
 		})
 	}
@@ -277,16 +283,16 @@ func AddCartItem(c *fiber.Ctx) error {
 		}
 		price = int(product.Price)
 		totalPrice = int(product.Price * float64(input.Qty))
-	} else if input.ItemType == "billing" && input.PackageID != nil {
-		var pkg entity.Package
-		if err := config.DB.First(&pkg, input.PackageID).Error; err != nil {
+	} else if input.ItemType == "billing" && input.BillingID != nil {
+		var pkg entity.Billing
+		if err := config.DB.Preload("Package").First(&pkg, input.BillingID).Error; err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
 				Status:  fiber.StatusNotFound,
-				Message: "Package not found",
+				Message: "Billing not found",
 			})
 		}
 
-		price = pkg.Price // diasumsikan total harga langsung
+		price = pkg.Package.Price // diasumsikan total harga langsung
 	}
 
 	// Buat item baru
@@ -294,7 +300,7 @@ func AddCartItem(c *fiber.Ctx) error {
 		CartID:     input.CartID,
 		ItemType:   input.ItemType,
 		ProductID:  input.ProductID,
-		PackageID:  input.PackageID,
+		BillingID:  input.BillingID,
 		Qty:        input.Qty,
 		Duration:   input.Duration,
 		Price:      price,
@@ -304,8 +310,8 @@ func AddCartItem(c *fiber.Ctx) error {
 	}
 
 	if err := config.DB.Create(&item).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
 			Message: "Failed to create cart item",
 		})
 	}
@@ -341,8 +347,8 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 
 	if input.ItemType == "product" && input.ProductID != nil {
 		query = query.Where("product_id = ?", input.ProductID)
-	} else if input.ItemType == "billing" && input.PackageID != nil {
-		query = query.Where("package_id = ?", input.PackageID)
+	} else if input.ItemType == "billing" && input.BillingID != nil {
+		query = query.Where("billing_id = ?", input.BillingID)
 	} else {
 		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
 			Status:  fiber.StatusBadRequest,
@@ -383,20 +389,20 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 				CreatedAt:  time.Now(),
 				UpdatedAt:  time.Now(),
 			}
-		} else if input.ItemType == "billing" && input.PackageID != nil {
-			var pkg entity.Package
-			if err := config.DB.First(&pkg, input.PackageID).Error; err != nil {
+		} else if input.ItemType == "billing" && input.BillingID != nil {
+			var pkg entity.Billing
+			if err := config.DB.Preload("Package").First(&pkg, input.BillingID).Error; err != nil {
 				return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
 					Status:  fiber.StatusNotFound,
 					Message: "Package not found",
 				})
 			}
-			price = pkg.Price
-			duration = &pkg.Duration
+			price = pkg.Package.Price
+			duration = &pkg.Package.Duration
 			cartItem = entity.CartItem{
 				CartID:     input.CartID,
 				ItemType:   input.ItemType,
-				PackageID:  input.PackageID,
+				BillingID:  input.BillingID,
 				Qty:        1,
 				Duration:   duration,
 				Price:      price,
@@ -407,8 +413,8 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 		}
 
 		if err := config.DB.Create(&cartItem).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-				Status:  fiber.StatusInternalServerError,
+			return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+				Status:  fiber.StatusBadRequest,
 				Message: "Failed to create cart item",
 			})
 		}
@@ -433,8 +439,8 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 		cartItem.Qty--
 		if cartItem.Qty < 1 {
 			if err := config.DB.Delete(&cartItem).Error; err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-					Status:  fiber.StatusInternalServerError,
+				return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+					Status:  fiber.StatusBadRequest,
 					Message: "Failed to delete cart item",
 				})
 			}
@@ -458,8 +464,8 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 	cartItem.UpdatedAt = time.Now()
 
 	if err := config.DB.Save(&cartItem).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
 			Message: "Failed to update cart item",
 		})
 	}
@@ -468,5 +474,47 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 		Status:  fiber.StatusOK,
 		Message: "Cart item updated successfully",
 		Data:    cartItem,
+	})
+}
+
+func DeleteCartItem(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	// Ambil dulu cart item-nya
+	var item entity.CartItem
+	if err := config.DB.First(&item, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
+				Status:  fiber.StatusNotFound,
+				Message: "Cart item not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to retrieve cart item",
+		})
+	}
+
+	// Jika item adalah billing dan BillingID tidak null, hapus billing
+	if item.ItemType == "billing" && item.BillingID != nil {
+		if err := config.DB.Delete(&entity.Billing{}, *item.BillingID).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+				Status:  fiber.StatusInternalServerError,
+				Message: "Failed to delete related billing",
+			})
+		}
+	}
+
+	// Hapus cart item-nya
+	if err := config.DB.Delete(&item).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to delete cart item",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dto.Response[any]{
+		Status:  fiber.StatusOK,
+		Message: "Cart item deleted successfully",
 	})
 }

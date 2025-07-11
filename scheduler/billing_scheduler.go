@@ -12,22 +12,31 @@ import (
 func StartBillingPolling() {
 	go func() {
 		for {
-			processExpiredBillings()
+			fmt.Println("Memeriksa billing yang expired...")
+			ProcessExpiredBillings()
 			time.Sleep(5 * time.Second) // polling interval
 		}
 	}()
 }
 
-func processExpiredBillings() {
+func ProcessExpiredBillings() {
 	now := time.Now()
 	var billings []entity.Billing
 
 	// Ambil billing yang waktu berakhirnya lewat & masih aktif
 	if err := config.DB.Preload("Device").
-		Where("end_time <= ? AND status = ?", now, "active").
+		Where("end_time <= ? AND is_active = ?", now, true).
 		Find(&billings).Error; err != nil {
 		fmt.Println("Gagal ambil billing:", err)
 		return
+	}
+
+	// ubah is_active billing jadi false
+	for _, billing := range billings {
+		if err := config.DB.Save(&billing).Error; err != nil {
+			fmt.Println("Gagal update status billing:", err)
+			continue
+		}
 	}
 
 	for _, billing := range billings {
@@ -37,20 +46,12 @@ func processExpiredBillings() {
 		shutdownTV(billing.Device.IP)
 
 		// Update status billing jadi expired
-		billing.Status = "expired"
+		billing.IsActive = false
 		if err := config.DB.Save(&billing).Error; err != nil {
 			fmt.Println("Gagal update status billing:", err)
 			continue
 		}
 
-		// Set device.available = true
-		if err := config.DB.Model(&entity.Device{}).
-			Where("id = ?", billing.DeviceID).
-			Update("available", true).Error; err != nil {
-			fmt.Println("Gagal update device available:", err)
-		} else {
-			fmt.Printf("Device %s kini tersedia kembali.\n", billing.Device.Name)
-		}
 	}
 }
 

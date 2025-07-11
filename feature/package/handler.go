@@ -26,6 +26,7 @@ func CreatePackage(c *fiber.Ctx) error {
 		Name:     input.Name,
 		Duration: input.Duration,
 		Price:    input.Price,
+		IsLoss:   input.IsLoss,
 	}
 
 	if err := config.DB.Create(&newPkg).Error; err != nil {
@@ -37,7 +38,9 @@ func CreatePackage(c *fiber.Ctx) error {
 		Name:      newPkg.Name,
 		Duration:  newPkg.Duration,
 		Price:     newPkg.Price,
+		IsLoss:    newPkg.IsLoss,
 		CreatedAt: newPkg.CreatedAt,
+		UpdatedAt: newPkg.UpdatedAt,
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(dto.Response[PackageResponse]{Message: "Package created successfully", Status: fiber.StatusCreated, Data: res})
@@ -55,6 +58,7 @@ func GetPackageByID(c *fiber.Ctx) error {
 		Name:      pkgData.Name,
 		Duration:  pkgData.Duration,
 		Price:     pkgData.Price,
+		IsLoss:    pkgData.IsLoss,
 		CreatedAt: pkgData.CreatedAt,
 		UpdatedAt: pkgData.UpdatedAt,
 	}
@@ -86,13 +90,13 @@ func GetAllPackages(c *fiber.Ctx) error {
 	}
 
 	result := make([]PackageResponse, 0)
-
 	for _, p := range packages {
 		result = append(result, PackageResponse{
 			ID:        p.ID,
 			Name:      p.Name,
 			Duration:  p.Duration,
 			Price:     p.Price,
+			IsLoss:    p.IsLoss,
 			CreatedAt: p.CreatedAt,
 			UpdatedAt: p.UpdatedAt,
 		})
@@ -128,6 +132,7 @@ func UpdatePackage(c *fiber.Ctx) error {
 	pkgData.Name = input.Name
 	pkgData.Duration = input.Duration
 	pkgData.Price = input.Price
+	pkgData.IsLoss = input.IsLoss
 
 	if err := config.DB.Save(&pkgData).Error; err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{Message: err.Error(), Status: fiber.StatusBadRequest})
@@ -138,6 +143,7 @@ func UpdatePackage(c *fiber.Ctx) error {
 		Name:      pkgData.Name,
 		Duration:  pkgData.Duration,
 		Price:     pkgData.Price,
+		IsLoss:    pkgData.IsLoss,
 		CreatedAt: pkgData.CreatedAt,
 		UpdatedAt: pkgData.UpdatedAt,
 	}
