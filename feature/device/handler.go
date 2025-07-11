@@ -8,6 +8,7 @@ import (
 	"kubik-rental/pkg"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -25,6 +26,7 @@ func GetAllDevices(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 	keyword := c.Query("keyword", "")
+	filterBilling := c.Query("is_billing", "") // bisa "true" atau "false"
 
 	if page < 1 {
 		page = 1
@@ -32,17 +34,18 @@ func GetAllDevices(c *fiber.Ctx) error {
 	if limit < 1 {
 		limit = 10
 	}
-
 	offset := (page - 1) * limit
 
+	// Query awal
 	query := config.DB.Model(&entity.Device{})
 
+	// Filter by keyword
 	if keyword != "" {
-		likeKeyword := "%" + keyword + "%"
-		query = query.Where("name LIKE ? OR ip LIKE ?", likeKeyword, likeKeyword)
+		like := "%" + keyword + "%"
+		query = query.Where("name LIKE ? OR ip LIKE ?", like, like)
 	}
 
-	// Hitung total data
+	// Hitung total data (sebelum pagination)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
@@ -51,24 +54,59 @@ func GetAllDevices(c *fiber.Ctx) error {
 		})
 	}
 
-	// Ambil data paginated
+	// Ambil data + preload semua billings (tanpa kondisi)
 	var devices []entity.Device
-	if err := query.Limit(limit).Offset(offset).Find(&devices).Error; err != nil {
+	if err := query.
+		Preload("Billings"). // preload semua billing
+		Limit(limit).
+		Offset(offset).
+		Find(&devices).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
 			Message: err.Error(),
 		})
 	}
 
-	totalPages := 0
-	if total > 0 {
-		totalPages = int(math.Ceil(float64(total) / float64(limit)))
+	// Transform + hitung is_billing
+	type DeviceWithFlag struct {
+		entity.Device
+		IsBilling bool `json:"is_billing"`
 	}
 
-	return c.Status(fiber.StatusOK).JSON(dto.Response[[]entity.Device]{
+	var result []DeviceWithFlag
+	for _, device := range devices {
+		isBilling := false
+		for _, b := range device.Billings {
+			if b.EndTime.IsZero() || b.EndTime.After(time.Now()) {
+				isBilling = true
+				break
+			}
+		}
+		result = append(result, DeviceWithFlag{
+			Device:    device,
+			IsBilling: isBilling,
+		})
+	}
+
+	// Filter `is_billing` jika diminta
+	if filterBilling != "" {
+		wantBilling := filterBilling == "true"
+		filtered := []DeviceWithFlag{}
+		for _, d := range result {
+			if d.IsBilling == wantBilling {
+				filtered = append(filtered, d)
+			}
+		}
+		result = filtered
+		total = int64(len(result))
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	return c.Status(fiber.StatusOK).JSON(dto.Response[[]DeviceWithFlag]{
 		Status:  fiber.StatusOK,
 		Message: "Success get all devices",
-		Data:    devices,
+		Data:    result,
 		Meta: &dto.Meta{
 			Page:      page,
 			Limit:     limit,

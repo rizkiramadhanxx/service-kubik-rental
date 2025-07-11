@@ -6,7 +6,7 @@ type CreateCartItemRequest struct {
 	CartID    uint   `json:"cart_id" validate:"required"`
 	ItemType  string `json:"item_type" validate:"required,oneof=product billing"`
 	ProductID *uint  `json:"product_id,omitempty"`
-	PackageID *uint  `json:"package_id,omitempty"`
+	BillingID *uint  `json:"billing_id,omitempty"`
 	Qty       int    `json:"qty" validate:"required,min=1"`
 	Duration  *int   `json:"duration,omitempty"` // untuk billing
 }
@@ -22,7 +22,7 @@ type UpdateQtyRequest struct {
 	CartID    uint   `json:"cart_id" validate:"required"`
 	ItemType  string `json:"item_type" validate:"required,oneof=product billing"`
 	ProductID *uint  `json:"product_id,omitempty"`
-	PackageID *uint  `json:"package_id,omitempty"`
+	BillingID *uint  `json:"billing_id,omitempty"`
 	Action    string `json:"action" validate:"required,oneof=increment decrement set"`
 	Value     *int   `json:"value,omitempty"` // hanya wajib jika action == set
 }
