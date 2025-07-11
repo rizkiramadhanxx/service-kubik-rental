@@ -47,6 +47,19 @@ func CreateBillingAndInsertToCartHandler(c *fiber.Ctx) error {
 		})
 	}
 
+	// ✅ Cek apakah device sedang digunakan oleh billing aktif lain
+	var count int64
+	config.DB.Model(&entity.Billing{}).
+		Where("device_id = ? AND is_active = ?", input.DeviceID, true).
+		Count(&count)
+
+	if count > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Device is already in use by another active billing",
+		})
+	}
+
 	// Hitung endTime
 	var endTime *time.Time
 	if !pkgData.IsLoss {

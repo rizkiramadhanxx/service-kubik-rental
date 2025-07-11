@@ -47,6 +47,31 @@ func CheckAdbConnected(ip string) bool {
 	return strings.Contains(string(output), ip+":5555")
 }
 
+func ConnectAdbToIP(ip string) bool {
+	cmd := exec.Command("embed/platform-tools/adb.exe", "connect", ip+":5555")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println("ADB connect error:", err)
+		return false
+	}
+
+	outStr := string(output)
+	fmt.Println("ADB connect output:", outStr)
+
+	// ❌ Jika output mengandung indikasi gagal
+	if strings.Contains(outStr, "failed") || strings.Contains(outStr, "refused") {
+		return false
+	}
+
+	// ✅ Jika sudah terhubung
+	if strings.Contains(outStr, "connected to") || strings.Contains(outStr, "already connected") {
+		return true
+	}
+
+	// Default: anggap berhasil jika tidak ada kata "failed" atau "refused"
+	return true
+}
+
 func PingIP(ip string) bool {
 	var cmd *exec.Cmd
 

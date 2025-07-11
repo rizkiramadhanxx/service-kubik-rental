@@ -47,25 +47,35 @@ func GetAllCategories(c *fiber.Ctx) error {
 	if page < 1 {
 		page = 1
 	}
-
 	if limit < 1 {
 		limit = 10
 	}
-
 	offset := (page - 1) * limit
 
+	query := config.DB.Model(&entity.Category{})
+
+	if keyword != "" {
+		query = query.Where("name LIKE ?", "%"+keyword+"%")
+	}
+
 	var total int64
-	if err := config.DB.Model(&entity.Category{}).Count(&total).Error; err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
+	if err := query.Count(&total).Error; err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": err.Error(),
+		})
 	}
 
 	var categories []entity.Category
-	if err := config.DB.Limit(limit).Offset(offset).Where("name LIKE ?", "%"+keyword+"%").Find(&categories).Error; err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": err.Error()})
+	if err := query.
+		Limit(limit).
+		Offset(offset).
+		Find(&categories).Error; err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": err.Error(),
+		})
 	}
 
-	// Mapping ke DTO
-	var categoryResponses []GetCategoryResponse
+	categoryResponses := make([]GetCategoryResponse, 0, len(categories))
 	for _, cat := range categories {
 		categoryResponses = append(categoryResponses, GetCategoryResponse{
 			ID:   cat.ID,
@@ -73,7 +83,6 @@ func GetAllCategories(c *fiber.Ctx) error {
 		})
 	}
 
-	// Hitung total pages
 	totalPage := int(math.Ceil(float64(total) / float64(limit)))
 
 	meta := dto.Meta{
@@ -85,8 +94,8 @@ func GetAllCategories(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(dto.Response[[]GetCategoryResponse]{
 		Status:  fiber.StatusOK,
-		Data:    categoryResponses,
 		Message: "Categories found",
+		Data:    categoryResponses, // akan jadi [] bukan null
 		Meta:    &meta,
 	})
 }
