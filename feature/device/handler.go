@@ -180,7 +180,7 @@ func PingDevice(c *fiber.Ctx) error {
 
 	// Panggil fungsi dari pkg
 	isReachable := pkg.PingIP(device.IP)
-	isAdbConnected := pkg.CheckAdbConnected(device.IP)
+	isAdbConnected := pkg.ConnectAdbToIP(device.IP)
 
 	return c.Status(fiber.StatusOK).JSON(dto.Response[any]{
 		Status:  fiber.StatusOK,

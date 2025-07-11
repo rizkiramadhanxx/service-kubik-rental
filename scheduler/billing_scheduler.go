@@ -12,7 +12,7 @@ import (
 func StartBillingPolling() {
 	go func() {
 		for {
-			fmt.Println("Memeriksa billing yang expired...")
+			// fmt.Println("Memeriksa billing yang expired...")
 			ProcessExpiredBillings()
 			time.Sleep(5 * time.Second) // polling interval
 		}

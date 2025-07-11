@@ -20,6 +20,7 @@ import (
 	package_bill "kubik-rental/feature/package"
 	"kubik-rental/feature/product"
 	"kubik-rental/feature/role"
+	"kubik-rental/feature/transaction"
 	"kubik-rental/feature/user"
 	"kubik-rental/scheduler"
 )
@@ -36,6 +37,8 @@ func RunMigration() {
 		&entity.Cart{},
 		&entity.Billing{},
 		&entity.Member{},
+		&entity.Transaction{},
+		&entity.TransactionDetail{},
 	)
 	if err != nil {
 		log.Fatal("Failed to run migrations:", err)
@@ -70,6 +73,7 @@ func main() {
 	package_bill.SetupRoutes(app.Group("/package"))
 	cart.SetupRoutes(app.Group("/cart"))
 	billing.SetupRoutes(app.Group("/billing"))
+	transaction.SetupRoutes(app.Group("/transaction"))
 
 	app.Get("/health-check", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})

@@ -78,7 +78,7 @@ func GetAllCarts(c *fiber.Ctx) error {
 	}
 
 	// Hitung total2
-	var cartResponses []CartDetailResponse
+	cartResponses := make([]CartDetailResponse, 0) // 🟢 penting agar [] bukan null
 	for _, cart := range carts {
 		var totalPrice, totalProduct, totalBilling int
 		for _, item := range cart.CartItems {
@@ -151,7 +151,7 @@ func GetCartByID(c *fiber.Ctx) error {
 
 	return c.JSON(dto.Response[CartDetailResponse]{
 		Status:  fiber.StatusOK,
-		Message: "Cart retrieved successfully",
+		Message: "Cart retrieved successfully 1",
 		Data: CartDetailResponse{
 			Cart:         cart,
 			TotalPrice:   totalPrice,
@@ -205,9 +205,37 @@ func UpdateCart(c *fiber.Ctx) error {
 func DeleteCart(c *fiber.Ctx) error {
 	id := c.Params("id")
 
+	// Ambil semua CartItem yang terkait
+	var cartItems []entity.CartItem
+	if err := config.DB.Where("cart_id = ?", id).Find(&cartItems).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to get cart items",
+		})
+	}
+
+	// Kumpulkan BillingID dari CartItem
+	var billingIDs []uint
+	for _, item := range cartItems {
+		if item.BillingID != nil {
+			billingIDs = append(billingIDs, *item.BillingID)
+		}
+	}
+
+	// Hapus billing terkait
+	if len(billingIDs) > 0 {
+		if err := config.DB.Delete(&entity.Billing{}, billingIDs).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+				Status:  fiber.StatusInternalServerError,
+				Message: "Failed to delete related billing",
+			})
+		}
+	}
+
+	// Hapus cart (otomatis akan hapus cart item karena cascade)
 	if err := config.DB.Delete(&entity.Cart{}, id).Error; err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
-			Status:  fiber.StatusBadRequest,
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
 			Message: "Failed to delete cart",
 		})
 	}
