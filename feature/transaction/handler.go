@@ -74,6 +74,21 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 					if item.Product.Category != nil {
 						td.CategoryName = &item.Product.Category.Name
 					}
+
+					// ✅ Kurangi stok produk
+					res := tx.Model(&entity.Product{}).
+						Where("id = ? AND stock >= ?", item.Product.ID, item.Qty).
+						UpdateColumn("stock", gorm.Expr("stock - ?", item.Qty))
+
+					if res.Error != nil {
+						return res.Error
+					}
+					if res.RowsAffected == 0 {
+						return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+							"status":  false,
+							"message": "Stok tidak mencukupi untuk produk: " + item.Product.Name,
+						})
+					}
 				}
 			case "billing":
 				if item.Billing != nil {
