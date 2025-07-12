@@ -41,12 +41,12 @@ func ProcessExpiredBillings() {
 
 	for _, billing := range billings {
 		fmt.Printf("Mematikan device: %s (%s)\n", billing.Device.Name, billing.Device.IP)
+		billing.IsActive = false
 
 		// Connect dan matikan TV
 		shutdownTV(billing.Device.IP)
 
 		// Update status billing jadi expired
-		billing.IsActive = false
 		if err := config.DB.Save(&billing).Error; err != nil {
 			fmt.Println("Gagal update status billing:", err)
 			continue
