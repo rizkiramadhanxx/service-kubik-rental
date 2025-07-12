@@ -3,13 +3,14 @@ package entity
 import "time"
 
 type CartItem struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	CartID     uint      `gorm:"not null;constraint:OnDelete:CASCADE" json:"cart_id"`
-	ItemType   string    `json:"item_type" validate:"required,oneof=product billing"`
-	ProductID  *uint     `json:"product_id,omitempty"`
-	Product    *Product  `gorm:"foreignKey:ProductID" json:"product,omitempty"`
-	BillingID  *uint     `gorm:"constraint:OnDelete:CASCADE" json:"billing_id,omitempty"`
-	Billing    *Billing  `gorm:"foreignKey:BillingID;references:ID" json:"billing,omitempty"`
+	ID        uint     `gorm:"primaryKey" json:"id"`
+	CartID    uint     `gorm:"not null;constraint:OnDelete:CASCADE" json:"cart_id"`
+	ItemType  string   `json:"item_type" validate:"required,oneof=product billing"`
+	ProductID *uint    `json:"product_id,omitempty"`
+	Product   *Product `gorm:"foreignKey:ProductID" json:"product,omitempty"`
+	BillingID *uint    `json:"billing_id,omitempty"`
+	Billing   *Billing `gorm:"foreignKey:BillingID;references:ID;constraint:OnDelete:CASCADE" json:"billing,omitempty"`
+
 	Duration   *int      `json:"duration,omitempty"`
 	Price      int       `json:"price" validate:"required,gt=0"`
 	TotalPrice int       `json:"total_price"`
