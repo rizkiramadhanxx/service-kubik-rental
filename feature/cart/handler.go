@@ -222,7 +222,17 @@ func DeleteCart(c *fiber.Ctx) error {
 		}
 	}
 
-	// Hapus billing terkait
+	// Hapus CartItem secara eksplisit (karena relasi cascade tidak berlaku *sebelum* Billing dihapus)
+	if len(cartItems) > 0 {
+		if err := config.DB.Delete(&entity.CartItem{}, "cart_id = ?", id).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+				Status:  fiber.StatusInternalServerError,
+				Message: "Failed to delete cart items",
+			})
+		}
+	}
+
+	// Setelah CartItem terhapus, baru hapus Billing-nya
 	if len(billingIDs) > 0 {
 		if err := config.DB.Delete(&entity.Billing{}, billingIDs).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
@@ -232,7 +242,7 @@ func DeleteCart(c *fiber.Ctx) error {
 		}
 	}
 
-	// Hapus cart (otomatis akan hapus cart item karena cascade)
+	// Terakhir, hapus cart-nya
 	if err := config.DB.Delete(&entity.Cart{}, id).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
@@ -523,22 +533,22 @@ func DeleteCartItem(c *fiber.Ctx) error {
 		})
 	}
 
-	// Jika item adalah billing dan BillingID tidak null, hapus billing
-	if item.ItemType == "billing" && item.BillingID != nil {
-		if err := config.DB.Delete(&entity.Billing{}, *item.BillingID).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-				Status:  fiber.StatusInternalServerError,
-				Message: "Failed to delete related billing",
-			})
-		}
-	}
-
-	// Hapus cart item-nya
+	// Langsung hapus CartItem dulu
 	if err := config.DB.Delete(&item).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
 			Message: "Failed to delete cart item",
 		})
+	}
+
+	// Jika tipe billing dan ada BillingID, hapus billing-nya
+	if item.ItemType == "billing" && item.BillingID != nil {
+		if err := config.DB.Delete(&entity.Billing{}, *item.BillingID).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+				Status:  fiber.StatusInternalServerError,
+				Message: "Cart item deleted but failed to delete related billing",
+			})
+		}
 	}
 
 	return c.Status(fiber.StatusOK).JSON(dto.Response[any]{

@@ -5,6 +5,7 @@ import (
 	"kubik-rental/config"
 	"kubik-rental/dto"
 	"kubik-rental/entity"
+	"kubik-rental/helpers"
 	"kubik-rental/pkg"
 	"math"
 	"strconv"
@@ -54,7 +55,7 @@ func GetAllDevices(c *fiber.Ctx) error {
 		})
 	}
 
-	// Ambil data + preload semua billings (tanpa kondisi)
+	// Ambil data + preload semua billings (tanpa kondisi) default array kosong
 	var devices []entity.Device
 	if err := query.
 		Preload("Billings"). // preload semua billing
@@ -106,7 +107,7 @@ func GetAllDevices(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(dto.Response[[]DeviceWithFlag]{
 		Status:  fiber.StatusOK,
 		Message: "Success get all devices",
-		Data:    result,
+		Data:    helpers.ResultOrEmpty(result),
 		Meta: &dto.Meta{
 			Page:      page,
 			Limit:     limit,
