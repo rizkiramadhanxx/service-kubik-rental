@@ -14,3 +14,8 @@ type TransactionQuery struct {
 	Page      int    `query:"page"`
 	Limit     int    `query:"limit"`
 }
+
+type TransactionStatData struct {
+	Date  string  `json:"date"`  // bisa YYYY-MM atau YYYY-MM-DD
+	Total float64 `json:"total"` // jumlah total transaksi
+}

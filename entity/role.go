@@ -13,6 +13,8 @@ const (
 	ModulePackage            = "package"
 	ModulePOS                = "pos"
 	ModuleTransactionHistory = "transaction-history"
+	ModuleCustom             = "custom"
+	ModuleAnalytic           = "analytic"
 )
 
 var AllModules = []string{
@@ -28,6 +30,8 @@ var AllModules = []string{
 	ModuleTransactionHistory,
 	ModulePackage,
 	ModulePOS,
+	ModuleCustom,
+	ModuleAnalytic,
 }
 
 type Role struct {

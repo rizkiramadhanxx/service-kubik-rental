@@ -1,11 +1,13 @@
 package transaction
 
 import (
+	"fmt"
 	"kubik-rental/config"
 	"kubik-rental/dto"
 	"kubik-rental/entity"
 	"kubik-rental/pkg"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -186,14 +188,14 @@ func GetAllTransaction(c *fiber.Ctx) error {
 
 	// Filter: buyer_name keyword
 	if q.Keyword != "" {
-		tx = tx.Where("buyer_name LIKE ?", "%"+q.Keyword+"%")
+		tx = tx.Where("buyer_name IS NOT NULL AND buyer_name LIKE ?", "%"+q.Keyword+"%")
 	}
 
 	// Count total
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
 			Message: "Gagal menghitung data transaksi",
 		})
 	}
@@ -201,8 +203,8 @@ func GetAllTransaction(c *fiber.Ctx) error {
 	// Get data
 	var transactions []entity.Transaction
 	if err := tx.Order("created_at DESC").Limit(q.Limit).Offset(offset).Find(&transactions).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
 			Message: "Gagal mengambil data transaksi",
 		})
 	}
@@ -223,5 +225,245 @@ func GetAllTransaction(c *fiber.Ctx) error {
 		Message: "Berhasil mengambil data transaksi",
 		Data:    transactions,
 		Meta:    meta,
+	})
+}
+
+func GetDetailTransaction(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	var q TransactionQuery
+	if err := c.QueryParser(&q); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Invalid query params",
+		})
+	}
+
+	// Default pagination
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.Limit <= 0 {
+		q.Limit = 10
+	}
+	offset := (q.Page - 1) * q.Limit
+
+	// Ambil transaksi
+	var tx entity.Transaction
+	if err := config.DB.First(&tx, "id = ?", id).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
+			Status:  fiber.StatusNotFound,
+			Message: "Transaksi tidak ditemukan",
+		})
+	}
+
+	// Hitung total detail yang cocok
+	detailQuery := config.DB.Model(&entity.TransactionDetail{}).Where("transaction_id = ?", id)
+
+	// Filter by type (item_type: billing/product)
+	if q.Type != "" {
+		detailQuery = detailQuery.Where("item_type = ?", q.Type)
+	}
+
+	// Filter by keyword (device_name atau product_name)
+	if q.Keyword != "" {
+		keyword := "%" + q.Keyword + "%"
+		detailQuery = detailQuery.Where(
+			"(device_name LIKE ? OR product_name LIKE ?)", keyword, keyword,
+		)
+	}
+
+	var total int64
+	if err := detailQuery.Count(&total).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Gagal menghitung detail transaksi",
+		})
+	}
+
+	// Ambil data detail sesuai paginasi
+	var details []entity.TransactionDetail
+	if err := detailQuery.
+		Order("id ASC").
+		Limit(q.Limit).
+		Offset(offset).
+		Find(&details).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Gagal mengambil detail transaksi",
+		})
+	}
+
+	meta := &dto.Meta{
+		Page:      q.Page,
+		Limit:     q.Limit,
+		Total:     int(total),
+		TotalPage: int(math.Ceil(float64(total) / float64(q.Limit))),
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dto.Response[[]entity.TransactionDetail]{
+		Status:  fiber.StatusOK,
+		Message: "Berhasil mengambil detail transaksi",
+		Data:    details,
+		Meta:    meta,
+	})
+
+}
+
+type TransactionStatRow struct {
+	Date    string `json:"date"`
+	All     int    `json:"all"`
+	Product int    `json:"product"`
+	Billing int    `json:"billing"`
+}
+
+func GetTransactionStats(c *fiber.Ctx) error {
+	db := config.DB
+
+	monthly := c.Query("monthly") // format: 07-2025
+	yearly := c.Query("yearly")   // format: 2025
+
+	if (monthly != "" && yearly != "") || (monthly == "" && yearly == "") {
+		return c.JSON(dto.Response[any]{
+			Message: "Harus pilih salah satu: 'monthly' (MM-YYYY) atau 'yearly' (YYYY)",
+			Status:  fiber.StatusOK,
+			Data: fiber.Map{
+				"analytic":      []TransactionStatRow{},
+				"total":         0,
+				"total_product": 0,
+				"total_billing": 0,
+			},
+		})
+	}
+
+	type RawResult struct {
+		Date     string
+		ItemType string
+		Total    int
+	}
+	type TransactionStatRow struct {
+		Date    string `json:"date"`
+		All     int    `json:"all"`
+		Product int    `json:"product"`
+		Billing int    `json:"billing"`
+	}
+
+	var (
+		start         time.Time
+		end           time.Time
+		layoutGroupBy string
+		results       []TransactionStatRow
+		statsMap      = map[string]*TransactionStatRow{}
+		rawResults    []RawResult
+
+		totalAll     int
+		totalProduct int
+		totalBilling int
+	)
+
+	if monthly != "" {
+		t, err := time.Parse("01-2006", monthly)
+		if err != nil {
+			return c.JSON(dto.Response[any]{
+				Message: "Format 'monthly' salah. Gunakan MM-YYYY",
+				Status:  fiber.StatusOK,
+				Data: fiber.Map{
+					"analytic":      []TransactionStatRow{},
+					"total":         0,
+					"total_product": 0,
+					"total_billing": 0,
+				},
+			})
+		}
+		start = t
+		end = t.AddDate(0, 1, 0)
+		layoutGroupBy = "%Y-%m-%d"
+
+		for d := start; d.Before(end); d = d.AddDate(0, 0, 1) {
+			key := d.Format("2006-01-02")
+			statsMap[key] = &TransactionStatRow{Date: key}
+		}
+	}
+
+	if yearly != "" {
+		t, err := time.Parse("2006", yearly)
+		if err != nil {
+			return c.JSON(dto.Response[any]{
+				Message: "Format 'yearly' salah. Gunakan YYYY",
+				Status:  fiber.StatusOK,
+				Data: fiber.Map{
+					"analytic":      []TransactionStatRow{},
+					"total":         0,
+					"total_product": 0,
+					"total_billing": 0,
+				},
+			})
+		}
+		start = t
+		end = t.AddDate(1, 0, 0)
+		layoutGroupBy = "%Y-%m"
+
+		for m := 1; m <= 12; m++ {
+			key := fmt.Sprintf("%d-%02d", t.Year(), m)
+			statsMap[key] = &TransactionStatRow{Date: key}
+		}
+	}
+
+	err := db.Model(&entity.TransactionDetail{}).
+		Select(fmt.Sprintf("strftime('%s', created_at) as date, item_type, SUM(subtotal) as total", layoutGroupBy)).
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Group("date, item_type").
+		Order("date").
+		Scan(&rawResults).Error
+
+	if err != nil {
+		return c.JSON(dto.Response[any]{
+			Message: "Gagal mengambil data analitik",
+			Status:  fiber.StatusOK,
+			Data: fiber.Map{
+				"analytic":      []TransactionStatRow{},
+				"total":         0,
+				"total_product": 0,
+				"total_billing": 0,
+			},
+		})
+	}
+
+	for _, r := range rawResults {
+		row := statsMap[r.Date]
+		if row == nil {
+			row = &TransactionStatRow{Date: r.Date}
+			statsMap[r.Date] = row
+		}
+		row.All += r.Total
+		totalAll += r.Total
+
+		switch r.ItemType {
+		case "product":
+			row.Product += r.Total
+			totalProduct += r.Total
+		case "billing":
+			row.Billing += r.Total
+			totalBilling += r.Total
+		}
+	}
+
+	for _, v := range statsMap {
+		results = append(results, *v)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Date < results[j].Date
+	})
+
+	return c.JSON(dto.Response[any]{
+		Message: "Berhasil mengambil data statistik transaksi",
+		Status:  fiber.StatusOK,
+		Data: fiber.Map{
+			"analytic":      results,
+			"total":         totalAll,
+			"total_product": totalProduct,
+			"total_billing": totalBilling,
+		},
 	})
 }
