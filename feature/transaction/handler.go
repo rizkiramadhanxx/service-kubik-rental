@@ -17,10 +17,18 @@ import (
 func CheckoutFromCart(c *fiber.Ctx) error {
 	var req CheckoutRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.ErrBadGateway.Code).JSON(fiber.Map{"status": fiber.StatusBadRequest, "message": "Invalid request"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  fiber.StatusBadRequest,
+			"message": "Invalid request",
+		})
 	}
+
 	if err := pkg.Validate.Struct(req); err != nil {
-		return c.Status(fiber.ErrBadGateway.Code).JSON(fiber.Map{"status": fiber.StatusBadRequest, "message": err.Error(), "errors": pkg.FormatValidationError(err)})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  fiber.StatusBadRequest,
+			"message": err.Error(),
+			"errors":  pkg.FormatValidationError(err),
+		})
 	}
 
 	return config.DB.Transaction(func(tx *gorm.DB) error {
@@ -29,11 +37,17 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			Preload("CartItems.Billing.Package").
 			Preload("CartItems.Billing.Device").
 			First(&cart, req.CartID).Error; err != nil {
-			return c.Status(404).JSON(fiber.Map{"status": fiber.StatusNotFound, "message": "Cart tidak ditemukan"})
+			return c.Status(404).JSON(fiber.Map{
+				"status":  fiber.StatusNotFound,
+				"message": "Cart tidak ditemukan",
+			})
 		}
 
 		if len(cart.CartItems) == 0 {
-			return c.Status(fiber.ErrBadGateway.Code).JSON(fiber.Map{"status": false, "message": "Cart kosong"})
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  false,
+				"message": "Cart kosong",
+			})
 		}
 
 		var (
@@ -45,6 +59,7 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			memberID  *uint
 		)
 
+		// Cek apakah member
 		if req.MemberID != nil {
 			var member entity.Member
 			if err := tx.First(&member, *req.MemberID).Error; err == nil {
@@ -56,6 +71,7 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			buyerName = req.BuyerName
 		}
 
+		// Bangun detail transaksi dan proses stok
 		for _, item := range cart.CartItems {
 			subtotal := item.Price * item.Qty
 			total += subtotal
@@ -76,8 +92,7 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 					if item.Product.Category != nil {
 						td.CategoryName = &item.Product.Category.Name
 					}
-
-					// ✅ Kurangi stok produk
+					// Kurangi stok
 					res := tx.Model(&entity.Product{}).
 						Where("id = ? AND stock >= ?", item.Product.ID, item.Qty).
 						UpdateColumn("stock", gorm.Expr("stock - ?", item.Qty))
@@ -101,10 +116,7 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 					if item.Billing.Package.ID != 0 {
 						td.PackageName = &item.Billing.Package.Name
 					}
-					// Hapus billing aktif
-					if err := tx.Delete(&entity.Billing{}, item.Billing.ID).Error; err != nil {
-						return err
-					}
+					// ⛔ Jangan hapus Billing di sini (FK masih aktif)
 				}
 			}
 
@@ -138,6 +150,21 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			return err
 		}
 
+		// ✅ Hapus semua CartItems dulu agar FK tidak dilanggar saat hapus billing
+		if err := tx.Where("cart_id = ?", cart.ID).Delete(&entity.CartItem{}).Error; err != nil {
+			return err
+		}
+
+		// ✅ Hapus Billing setelah CartItem sudah tidak ada
+		for _, item := range cart.CartItems {
+			if item.Billing != nil {
+				if err := tx.Delete(&entity.Billing{}, item.Billing.ID).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		// ✅ Hapus cart
 		if err := tx.Delete(&entity.Cart{}, cart.ID).Error; err != nil {
 			return err
 		}
