@@ -3,7 +3,7 @@ package entity
 import "time"
 
 type Transaction struct {
-	ID        uint                `gorm:"primaryKey"`
+	ID        uint                `gorm:"primaryKey" json:"id"`
 	CartName  string              `json:"cart_name"`
 	MemberID  *uint               `json:"member_id,omitempty"`  // nullable
 	BuyerName *string             `json:"buyer_name,omitempty"` // snapshot nama pembeli
@@ -11,11 +11,11 @@ type Transaction struct {
 	Total     int                 `json:"total"`
 	Type      string              `json:"type"` // "product", "billing", "mixed"
 	CreatedAt time.Time           `json:"created_at"`
-	Details   []TransactionDetail `gorm:"foreignKey:TransactionID"`
+	Details   []TransactionDetail `gorm:"foreignKey:TransactionID" json:"details"`
 }
 
 type TransactionDetail struct {
-	ID            uint   `gorm:"primaryKey"`
+	ID            uint   `gorm:"primaryKey" json:"id"`
 	TransactionID uint   `json:"transaction_id"`
 	ItemType      string `json:"item_type"` // "product" / "billing"
 
@@ -33,4 +33,6 @@ type TransactionDetail struct {
 	Price    int `json:"price"`
 	Qty      int `json:"qty"`
 	Subtotal int `json:"subtotal"`
+
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"` // ⬅️ auto isi saat insert
 }

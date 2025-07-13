@@ -13,5 +13,7 @@ func SetupRoutes(router fiber.Router) {
 	)
 
 	router.Post("/checkout", CheckoutFromCart)
+	router.Get("/analytic", GetTransactionStats) // ⬅️ pindahkan ke atas
 	router.Get("/", GetAllTransaction)
+	router.Get("/:id", GetDetailTransaction)
 }
