@@ -2,6 +2,7 @@ package cart
 
 import (
 	"errors"
+	"fmt"
 	"kubik-rental/config"
 	"kubik-rental/dto"
 	"kubik-rental/entity"
@@ -205,54 +206,57 @@ func UpdateCart(c *fiber.Ctx) error {
 func DeleteCart(c *fiber.Ctx) error {
 	id := c.Params("id")
 
-	// Ambil semua CartItem yang terkait
-	var cartItems []entity.CartItem
-	if err := config.DB.Where("cart_id = ?", id).Find(&cartItems).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
-			Message: "Failed to get cart items",
-		})
-	}
-
-	// Kumpulkan BillingID dari CartItem
-	var billingIDs []uint
-	for _, item := range cartItems {
-		if item.BillingID != nil {
-			billingIDs = append(billingIDs, *item.BillingID)
+	err := config.DB.Transaction(func(tx *gorm.DB) error {
+		// Ambil semua CartItems dengan item_type billing
+		var cartItems []entity.CartItem
+		if err := tx.Where("cart_id = ? AND item_type = ?", id, "billing").Find(&cartItems).Error; err != nil {
+			return err
 		}
-	}
 
-	// Hapus CartItem secara eksplisit (karena relasi cascade tidak berlaku *sebelum* Billing dihapus)
-	if len(cartItems) > 0 {
-		if err := config.DB.Delete(&entity.CartItem{}, "cart_id = ?", id).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-				Status:  fiber.StatusInternalServerError,
-				Message: "Failed to delete cart items",
-			})
+		fmt.Println("=== Daftar Cart Items (Billing) ===")
+		for _, item := range cartItems {
+			fmt.Printf("CartItem ID: %d, CartID: %d, BillingID: %v, ItemType: %s\n", item.ID, item.CartID, item.BillingID, item.ItemType)
 		}
-	}
 
-	// Setelah CartItem terhapus, baru hapus Billing-nya
-	if len(billingIDs) > 0 {
-		if err := config.DB.Delete(&entity.Billing{}, billingIDs).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-				Status:  fiber.StatusInternalServerError,
-				Message: "Failed to delete related billing",
-			})
+		// ✅ Hapus semua CartItem dulu (supaya foreign key tidak dilanggar saat hapus Billing)
+		if err := tx.Where("cart_id = ?", id).Delete(&entity.CartItem{}).Error; err != nil {
+			return fmt.Errorf("Gagal menghapus cart items: %v", err)
 		}
-	}
 
-	// Terakhir, hapus cart-nya
-	if err := config.DB.Delete(&entity.Cart{}, id).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
-			Message: "Failed to delete cart",
+		// ✅ Hapus billing terkait setelah CartItem dihapus
+		for _, item := range cartItems {
+			if item.BillingID != nil {
+				res := tx.Delete(&entity.Billing{}, *item.BillingID)
+				if res.Error != nil {
+					return res.Error
+				}
+				if res.RowsAffected == 0 {
+					return fmt.Errorf("Billing dengan ID %d tidak ditemukan", *item.BillingID)
+				}
+			}
+		}
+
+		// ✅ Terakhir, hapus cart
+		if err := tx.Delete(&entity.Cart{}, id).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		// Tetap kembalikan status 200 agar konsisten, tapi beri tahu gagal
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: fmt.Sprintf("Gagal menghapus cart: %v", err.Error()),
+			Data:    nil,
 		})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(dto.Response[any]{
 		Status:  fiber.StatusOK,
-		Message: "Cart deleted successfully",
+		Message: "Cart dan billing terkait berhasil dihapus",
+		Data:    nil,
 	})
 }
 
