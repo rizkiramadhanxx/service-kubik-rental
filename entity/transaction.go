@@ -17,6 +17,7 @@ type Transaction struct {
 	Total           int                 `json:"total"`
 	Type            string              `json:"type"` // "product", "billing", "mixed"
 	CreatedAt       time.Time           `json:"created_at"`
+	Cashier         string              `json:"cashier"`
 	Details         []TransactionDetail `gorm:"foreignKey:TransactionID" json:"details"`
 }
 

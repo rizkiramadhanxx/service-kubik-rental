@@ -37,6 +37,7 @@ func Authentication() fiber.Handler {
 		}
 
 		c.Locals("user", u)
+
 		return c.Next()
 	}
 }

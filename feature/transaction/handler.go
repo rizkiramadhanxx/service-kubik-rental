@@ -15,6 +15,15 @@ import (
 )
 
 func CheckoutFromCart(c *fiber.Ctx) error {
+	currentUser, ok := c.Locals("user").(entity.User)
+
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  false,
+			"message": "Unauthorized",
+		})
+	}
+
 	var req CheckoutRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -144,6 +153,7 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			Total:     total,
 			Type:      txType,
 			Details:   details,
+			Cashier:   currentUser.Username,
 		}
 
 		if err := tx.Create(&transaction).Error; err != nil {
@@ -178,6 +188,7 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 }
 
 func GetAllTransaction(c *fiber.Ctx) error {
+
 	var q TransactionQuery
 	if err := c.QueryParser(&q); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
