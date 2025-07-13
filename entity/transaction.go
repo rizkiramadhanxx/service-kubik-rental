@@ -1,17 +1,23 @@
 package entity
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Transaction struct {
-	ID        uint                `gorm:"primaryKey" json:"id"`
-	CartName  string              `json:"cart_name"`
-	MemberID  *uint               `json:"member_id,omitempty"`  // nullable
-	BuyerName *string             `json:"buyer_name,omitempty"` // snapshot nama pembeli
-	IsMember  bool                `json:"is_member"`            // true jika member
-	Total     int                 `json:"total"`
-	Type      string              `json:"type"` // "product", "billing", "mixed"
-	CreatedAt time.Time           `json:"created_at"`
-	Details   []TransactionDetail `gorm:"foreignKey:TransactionID" json:"details"`
+	ID              uint                `gorm:"primaryKey" json:"id"`
+	TransactionCode string              `gorm:"uniqueIndex" json:"transaction_code"`
+	CartName        string              `json:"cart_name"`
+	MemberID        *uint               `json:"member_id,omitempty"`
+	BuyerName       *string             `json:"buyer_name,omitempty"`
+	IsMember        bool                `json:"is_member"`
+	Total           int                 `json:"total"`
+	Type            string              `json:"type"` // "product", "billing", "mixed"
+	CreatedAt       time.Time           `json:"created_at"`
+	Details         []TransactionDetail `gorm:"foreignKey:TransactionID" json:"details"`
 }
 
 type TransactionDetail struct {
@@ -35,4 +41,10 @@ type TransactionDetail struct {
 	Subtotal int `json:"subtotal"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"` // ⬅️ auto isi saat insert
+}
+
+// ✅ Auto-generate transaction_code sebelum insert
+func (t *Transaction) BeforeCreate(tx *gorm.DB) (err error) {
+	t.TransactionCode = fmt.Sprintf("TRX-%d", time.Now().Unix())
+	return
 }

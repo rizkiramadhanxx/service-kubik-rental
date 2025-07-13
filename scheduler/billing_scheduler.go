@@ -40,7 +40,8 @@ func ProcessExpiredBillings() {
 	}
 
 	for _, billing := range billings {
-		fmt.Printf("Mematikan device: %s (%s)\n", billing.Device.Name, billing.Device.IP)
+		fmt.Printf("Mematikan device: %s (%s)\n ID: %d\n Status: %v\n", billing.Device.Name, billing.Device.IP, billing.ID, billing.IsActive)
+
 		billing.IsActive = false
 
 		// Connect dan matikan TV
