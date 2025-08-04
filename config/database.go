@@ -2,8 +2,7 @@ package config
 
 import (
 	"log"
-	"time" // ⬅️ tambahkan
-
+	// ⬅️ tambahkan
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -12,11 +11,11 @@ var DB *gorm.DB
 
 func InitDB() {
 	// ⬇️ Set time.Local ke Asia/Jakarta agar semua time.Now() dan autoCreateTime pakai WIB
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		log.Fatal("Gagal load lokasi Asia/Jakarta:", err)
-	}
-	time.Local = loc
+	// loc, err := time.LoadLocation("Asia/Jakarta")
+	// if err != nil {
+	// 	log.Fatal("Gagal load lokasi Asia/Jakarta:", err)
+	// }
+	// time.Local = loc
 
 	db, err := gorm.Open(sqlite.Open("kubik.db"), &gorm.Config{})
 	if err != nil {
