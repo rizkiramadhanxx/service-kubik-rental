@@ -18,25 +18,25 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 	currentUser, ok := c.Locals("user").(entity.User)
 
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"status":  false,
-			"message": "Unauthorized",
+		return c.Status(fiber.StatusUnauthorized).JSON(dto.Response[any]{
+			Status:  fiber.StatusUnauthorized,
+			Message: "Unauthorized",
 		})
 	}
 
 	var req CheckoutRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  fiber.StatusBadRequest,
-			"message": "Invalid request",
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Invalid request",
 		})
 	}
 
 	if err := pkg.Validate.Struct(req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  fiber.StatusBadRequest,
-			"message": err.Error(),
-			"errors":  pkg.FormatValidationError(err),
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: err.Error(),
+			Data:    pkg.FormatValidationError(err),
 		})
 	}
 
@@ -46,16 +46,16 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			Preload("CartItems.Billing.Package").
 			Preload("CartItems.Billing.Device").
 			First(&cart, req.CartID).Error; err != nil {
-			return c.Status(404).JSON(fiber.Map{
-				"status":  fiber.StatusNotFound,
-				"message": "Cart tidak ditemukan",
+			return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
+				Status:  fiber.StatusNotFound,
+				Message: "Cart tidak ditemukan",
 			})
 		}
 
 		if len(cart.CartItems) == 0 {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  false,
-				"message": "Cart kosong",
+			return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+				Status:  fiber.StatusBadRequest,
+				Message: "Cart kosong",
 			})
 		}
 
@@ -101,7 +101,28 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 					if item.Product.Category != nil {
 						td.CategoryName = &item.Product.Category.Name
 					}
-					// Kurangi stok
+
+					// Cek stok terlebih dahulu
+					var currentStock int
+					if err := tx.Model(&entity.Product{}).
+						Select("stock").
+						Where("id = ?", item.Product.ID).
+						Scan(&currentStock).Error; err != nil {
+						return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+							Status:  fiber.StatusInternalServerError,
+							Message: "Gagal mengecek stok produk: " + item.Product.Name,
+						})
+					}
+
+					if currentStock < item.Qty {
+						return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+							Status: fiber.StatusBadRequest,
+							Message: fmt.Sprintf("Stok tidak mencukupi untuk produk: %s. Stok tersedia: %d, diminta: %d",
+								item.Product.Name, currentStock, item.Qty),
+						})
+					}
+
+					// Kurangi stok dengan atomic update
 					res := tx.Model(&entity.Product{}).
 						Where("id = ? AND stock >= ?", item.Product.ID, item.Qty).
 						UpdateColumn("stock", gorm.Expr("stock - ?", item.Qty))
@@ -110,9 +131,9 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 						return res.Error
 					}
 					if res.RowsAffected == 0 {
-						return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-							"status":  false,
-							"message": "Stok tidak mencukupi untuk produk: " + item.Product.Name,
+						return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+							Status:  fiber.StatusBadRequest,
+							Message: "Gagal mengurangi stok produk: " + item.Product.Name,
 						})
 					}
 				}
@@ -179,10 +200,10 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 			return err
 		}
 
-		return c.JSON(fiber.Map{
-			"status":  fiber.StatusOK,
-			"message": "Checkout berhasil",
-			"data":    transaction,
+		return c.JSON(dto.Response[entity.Transaction]{
+			Status:  fiber.StatusOK,
+			Message: "Checkout berhasil",
+			Data:    transaction,
 		})
 	})
 }
@@ -332,6 +353,48 @@ func GetDetailTransaction(c *fiber.Ctx) error {
 		})
 	}
 
+	// Hitung total qty dari semua detail transaksi
+	var totalQty int
+	if err := config.DB.Model(&entity.TransactionDetail{}).
+		Select("SUM(qty)").
+		Where("transaction_id = ?", id).
+		Scan(&totalQty).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Gagal mengambil total qty detail transaksi",
+		})
+	}
+
+	// Hitung total billing, product, dan qty per item type menggunakan aggregation
+	type AggregateResult struct {
+		ItemType      string
+		TotalSubtotal int
+		TotalQty      int
+	}
+
+	var aggregateResults []AggregateResult
+	if err := config.DB.Model(&entity.TransactionDetail{}).
+		Select("item_type, SUM(subtotal) as total_subtotal, SUM(qty) as total_qty").
+		Where("transaction_id = ?", id).
+		Group("item_type").
+		Scan(&aggregateResults).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Gagal mengambil aggregat detail transaksi",
+		})
+	}
+
+	var totalBilling, totalProduct, totalQtyBilling, totalQtyProduct int
+	for _, result := range aggregateResults {
+		if result.ItemType == "billing" {
+			totalBilling += result.TotalSubtotal
+			totalQtyBilling += result.TotalQty
+		} else if result.ItemType == "product" {
+			totalProduct += result.TotalSubtotal
+			totalQtyProduct += result.TotalQty
+		}
+	}
+
 	meta := &dto.Meta{
 		Page:      q.Page,
 		Limit:     q.Limit,
@@ -339,11 +402,20 @@ func GetDetailTransaction(c *fiber.Ctx) error {
 		TotalPage: int(math.Ceil(float64(total) / float64(q.Limit))),
 	}
 
-	return c.Status(fiber.StatusOK).JSON(dto.Response[[]entity.TransactionDetail]{
+	return c.Status(fiber.StatusOK).JSON(dto.Response[entity.ResponseTransactionDetailData]{
 		Status:  fiber.StatusOK,
 		Message: "Berhasil mengambil detail transaksi",
-		Data:    details,
-		Meta:    meta,
+		Data: entity.ResponseTransactionDetailData{
+			TotalPrice:          tx.Total,
+			TotalBilling:        totalBilling,
+			TotalQtyBilling:     totalQtyBilling,
+			TotalProduct:        totalProduct,
+			TotalQtyProduct:     totalQtyProduct,
+			TotalQty:            totalQty,
+			TotalQtyTransaction: totalQty, // Same as TotalQty
+			Details:             details,
+		},
+		Meta: meta,
 	})
 
 }
@@ -355,6 +427,12 @@ type TransactionStatRow struct {
 	Billing int    `json:"billing"`
 }
 
+type RawResult struct {
+	Date     string
+	ItemType string
+	Total    int
+}
+
 func GetTransactionStats(c *fiber.Ctx) error {
 	db := config.DB
 
@@ -362,28 +440,16 @@ func GetTransactionStats(c *fiber.Ctx) error {
 	yearly := c.Query("yearly")   // format: 2025
 
 	if (monthly != "" && yearly != "") || (monthly == "" && yearly == "") {
-		return c.JSON(dto.Response[any]{
+		return c.JSON(dto.Response[map[string]interface{}]{
 			Message: "Harus pilih salah satu: 'monthly' (MM-YYYY) atau 'yearly' (YYYY)",
 			Status:  fiber.StatusOK,
-			Data: fiber.Map{
+			Data: map[string]interface{}{
 				"analytic":      []TransactionStatRow{},
 				"total":         0,
 				"total_product": 0,
 				"total_billing": 0,
 			},
 		})
-	}
-
-	type RawResult struct {
-		Date     string
-		ItemType string
-		Total    int
-	}
-	type TransactionStatRow struct {
-		Date    string `json:"date"`
-		All     int    `json:"all"`
-		Product int    `json:"product"`
-		Billing int    `json:"billing"`
 	}
 
 	var (
@@ -402,10 +468,10 @@ func GetTransactionStats(c *fiber.Ctx) error {
 	if monthly != "" {
 		t, err := time.Parse("01-2006", monthly)
 		if err != nil {
-			return c.JSON(dto.Response[any]{
+			return c.JSON(dto.Response[map[string]interface{}]{
 				Message: "Format 'monthly' salah. Gunakan MM-YYYY",
 				Status:  fiber.StatusOK,
-				Data: fiber.Map{
+				Data: map[string]interface{}{
 					"analytic":      []TransactionStatRow{},
 					"total":         0,
 					"total_product": 0,
@@ -426,10 +492,10 @@ func GetTransactionStats(c *fiber.Ctx) error {
 	if yearly != "" {
 		t, err := time.Parse("2006", yearly)
 		if err != nil {
-			return c.JSON(dto.Response[any]{
+			return c.JSON(dto.Response[map[string]interface{}]{
 				Message: "Format 'yearly' salah. Gunakan YYYY",
 				Status:  fiber.StatusOK,
-				Data: fiber.Map{
+				Data: map[string]interface{}{
 					"analytic":      []TransactionStatRow{},
 					"total":         0,
 					"total_product": 0,
@@ -455,10 +521,10 @@ func GetTransactionStats(c *fiber.Ctx) error {
 		Scan(&rawResults).Error
 
 	if err != nil {
-		return c.JSON(dto.Response[any]{
+		return c.JSON(dto.Response[map[string]interface{}]{
 			Message: "Gagal mengambil data analitik",
 			Status:  fiber.StatusOK,
-			Data: fiber.Map{
+			Data: map[string]interface{}{
 				"analytic":      []TransactionStatRow{},
 				"total":         0,
 				"total_product": 0,
@@ -494,10 +560,10 @@ func GetTransactionStats(c *fiber.Ctx) error {
 		return results[i].Date < results[j].Date
 	})
 
-	return c.JSON(dto.Response[any]{
+	return c.JSON(dto.Response[map[string]interface{}]{
 		Message: "Berhasil mengambil data statistik transaksi",
 		Status:  fiber.StatusOK,
-		Data: fiber.Map{
+		Data: map[string]interface{}{
 			"analytic":      results,
 			"total":         totalAll,
 			"total_product": totalProduct,

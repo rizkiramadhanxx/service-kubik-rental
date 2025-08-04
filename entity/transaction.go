@@ -44,6 +44,17 @@ type TransactionDetail struct {
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"` // ⬅️ auto isi saat insert
 }
 
+type ResponseTransactionDetailData struct {
+	TotalBilling        int                 `json:"total_billing"`
+	TotalQtyBilling     int                 `json:"total_qty_billing"`
+	TotalQty            int                 `json:"total_qty"`
+	TotalProduct        int                 `json:"total_product"`
+	TotalQtyProduct     int                 `json:"total_qty_product"`
+	TotalPrice          int                 `json:"total_price"`
+	TotalQtyTransaction int                 `json:"total_qty_transaction"`
+	Details             []TransactionDetail `json:"details"`
+}
+
 // ✅ Auto-generate transaction_code sebelum insert
 func (t *Transaction) BeforeCreate(tx *gorm.DB) (err error) {
 	t.TransactionCode = fmt.Sprintf("TRX-%d", time.Now().Unix())
