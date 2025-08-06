@@ -115,6 +115,46 @@ func GetAllCarts(c *fiber.Ctx) error {
 	})
 }
 
+func ToggleCartItemPaid(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	var item entity.CartItem
+	if err := config.DB.First(&item, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
+				Status:  fiber.StatusNotFound,
+				Message: "Cart item not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to retrieve cart item",
+		})
+	}
+
+	// Toggle is_paid
+	item.IsPaid = !item.IsPaid
+	item.UpdatedAt = time.Now()
+
+	if err := config.DB.Save(&item).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to update cart item payment status",
+		})
+	}
+
+	statusMsg := "Cart item marked as unpaid"
+	if item.IsPaid {
+		statusMsg = "Cart item marked as paid"
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dto.Response[entity.CartItem]{
+		Status:  fiber.StatusOK,
+		Message: statusMsg,
+		Data:    item,
+	})
+}
+
 func GetCartByID(c *fiber.Ctx) error {
 	id := c.Params("id")
 
@@ -140,24 +180,32 @@ func GetCartByID(c *fiber.Ctx) error {
 	}
 
 	// Perhitungan total
-	var totalPrice, totalProduct, totalBilling int
+	var totalPrice, totalProduct, totalBilling, totalPay int
 	for _, item := range cart.CartItems {
 		totalPrice += item.TotalPrice
-		if item.ItemType == "product" {
+
+		// Hitung total belum dibayar
+		if !item.IsPaid {
+			totalPay += item.TotalPrice
+		}
+
+		switch item.ItemType {
+		case "product":
 			totalProduct++
-		} else if item.ItemType == "billing" {
+		case "billing":
 			totalBilling++
 		}
 	}
 
 	return c.JSON(dto.Response[CartDetailResponse]{
 		Status:  fiber.StatusOK,
-		Message: "Cart retrieved successfully 1",
+		Message: "Cart retrieved successfully",
 		Data: CartDetailResponse{
 			Cart:         cart,
 			TotalPrice:   totalPrice,
 			TotalProduct: totalProduct,
 			TotalBilling: totalBilling,
+			TotalPay:     totalPay,
 		},
 	})
 }

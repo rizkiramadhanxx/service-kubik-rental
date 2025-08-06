@@ -11,10 +11,13 @@ type CartItem struct {
 	BillingID *uint    `json:"billing_id,omitempty"`
 	Billing   *Billing `gorm:"foreignKey:BillingID;references:ID;constraint:OnDelete:CASCADE" json:"billing,omitempty"`
 
-	Duration   *int      `json:"duration,omitempty"`
-	Price      int       `json:"price" validate:"required,gt=0"`
-	TotalPrice int       `json:"total_price"`
-	Qty        int       `json:"qty" validate:"required,min=1"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	Duration   *int `json:"duration,omitempty"`
+	Price      int  `json:"price" validate:"required,gt=0"`
+	TotalPrice int  `json:"total_price"`
+	Qty        int  `json:"qty" validate:"required,min=1"`
+
+	IsPaid bool `json:"is_paid" gorm:"default:false"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

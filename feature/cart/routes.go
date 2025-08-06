@@ -19,6 +19,7 @@ func SetupRoutes(router fiber.Router) {
 	route.Patch("/:id", UpdateCart)
 	route.Delete("/:id", DeleteCart)
 	route.Post("/add-item", AddCartItem)
+	route.Post("/toggle-paid/:id", ToggleCartItemPaid)
 	route.Post("/action-qty-cart-item", UpdateCartItemQty)
 	route.Delete("/cart-item/:id", DeleteCartItem)
 

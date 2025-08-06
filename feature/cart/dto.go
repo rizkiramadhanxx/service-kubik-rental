@@ -16,6 +16,7 @@ type CartDetailResponse struct {
 	TotalPrice   int `json:"total_price"`
 	TotalProduct int `json:"total_product"`
 	TotalBilling int `json:"total_billing"`
+	TotalPay     int `json:"total_pay"`
 }
 
 type UpdateQtyRequest struct {
