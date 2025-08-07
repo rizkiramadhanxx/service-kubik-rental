@@ -9,7 +9,6 @@ import (
 	"kubik-rental/pkg"
 	"math"
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -58,7 +57,7 @@ func GetAllDevices(c *fiber.Ctx) error {
 	// Ambil data + preload semua billings (tanpa kondisi) default array kosong
 	var devices []entity.Device
 	if err := query.
-		Preload("Billings"). // preload semua billing
+		Preload("Billings.Package").
 		Limit(limit).
 		Offset(offset).
 		Find(&devices).Error; err != nil {
@@ -78,7 +77,7 @@ func GetAllDevices(c *fiber.Ctx) error {
 	for _, device := range devices {
 		isBilling := false
 		for _, b := range device.Billings {
-			if b.EndTime.IsZero() || b.EndTime.After(time.Now()) {
+			if b.IsActive {
 				isBilling = true
 				break
 			}

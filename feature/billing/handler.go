@@ -53,11 +53,20 @@ func CreateBillingAndInsertToCartHandler(c *fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusBadRequest, "Device is already in use by another active billing")
 		}
 
-		// Hitung endTime
+		// Tentukan endTime & harga
 		var endTime *time.Time
-		if !pkgData.IsLoss {
+		price := 0
+		totalPrice := 0
+
+		if input.IsLoss != nil && *input.IsLoss {
+			// loss mode → tidak ada endTime & harga 0
+			endTime = nil
+		} else {
+			// normal
 			et := time.Now().Add(time.Duration(pkgData.Duration) * time.Minute)
 			endTime = &et
+			price = pkgData.Price
+			totalPrice = pkgData.Price
 		}
 
 		// Simpan billing
@@ -65,12 +74,12 @@ func CreateBillingAndInsertToCartHandler(c *fiber.Ctx) error {
 			DeviceID:  input.DeviceID,
 			PackageID: input.PackageID,
 			IsActive:  true,
+			IsLoss:    *input.IsLoss,
 			StartTime: time.Now(),
 			CreatedAt: time.Now(),
+			EndTime:   endTime,
 		}
-		if endTime != nil {
-			billing.EndTime = *endTime
-		}
+
 		if err := tx.Create(&billing).Error; err != nil {
 			return err
 		}
@@ -100,9 +109,8 @@ func CreateBillingAndInsertToCartHandler(c *fiber.Ctx) error {
 			ItemType:   "billing",
 			BillingID:  &billing.ID,
 			Qty:        1,
-			Duration:   &pkgData.Duration,
-			Price:      pkgData.Price,
-			TotalPrice: pkgData.Price,
+			Price:      price,
+			TotalPrice: totalPrice,
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
@@ -150,46 +158,71 @@ func StopLossBilling(c *fiber.Ctx) error {
 		})
 	}
 
-	// 2. Validasi apakah sudah dihentikan
-	if !billing.EndTime.IsZero() {
+	// 2. Validasi package tidak nil
+	if billing.Package.ID == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Billing does not have a valid package",
+		})
+	}
+
+	// 3. Validasi apakah sudah dihentikan (pointer-safe)
+	if billing.EndTime != nil && !billing.EndTime.IsZero() {
 		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
 			Status:  fiber.StatusBadRequest,
 			Message: "Billing already stopped",
 		})
 	}
 
-	// 3. Hitung durasi dan harga total
+	// 4. Hitung durasi dan harga total (per menit)
 	now := time.Now()
 	durationMin := int(now.Sub(billing.StartTime).Minutes())
+	if durationMin <= 0 {
+		durationMin = 1 // minimal 1 menit
+	}
+
 	pricePerHour := billing.Package.Price
-	totalPrice := int(math.Ceil(float64(durationMin)/60.0)) * pricePerHour
+	totalPrice := int(math.Ceil(float64(durationMin) * float64(pricePerHour) / 60.0))
 
-	// 4. Update billing dengan EndTime
-	billing.EndTime = now
-	if err := config.DB.Save(&billing).Error; err != nil {
+	// 5. Transaction
+	err := config.DB.Transaction(func(tx *gorm.DB) error {
+		// 5a. Update billing lengkap
+		billing.EndTime = &now
+		billing.IsActive = false
+
+		if err := tx.Save(&billing).Error; err != nil {
+			return err
+		}
+
+		// 5b. Update cart_item (jika ada)
+		if err := tx.Model(&entity.CartItem{}).
+			Where("billing_id = ?", billing.ID).
+			Updates(map[string]interface{}{
+				"price":       totalPrice,
+				"total_price": totalPrice,
+				"updated_at":  now,
+			}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
 			Status:  fiber.StatusInternalServerError,
-			Message: "Failed to update billing",
+			Message: "Failed to stop billing transaction",
 		})
 	}
 
-	// 5. Update cart_item
-	if err := config.DB.Model(&entity.CartItem{}).
-		Where("billing_id = ?", billing.ID).
-		Updates(map[string]interface{}{
-			"duration":    durationMin,
-			"price":       pricePerHour,
-			"total_price": totalPrice,
-			"updated_at":  now,
-		}).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
-			Status:  fiber.StatusInternalServerError,
-			Message: "Failed to update cart item",
-		})
-	}
-
+	// 6. Response lengkap
 	return c.JSON(dto.Response[any]{
 		Status:  fiber.StatusOK,
 		Message: "Billing stopped and cart item updated successfully",
+		Data: map[string]any{
+			"duration_min": durationMin,
+			"price_hour":   pricePerHour,
+			"total_price":  totalPrice,
+		},
 	})
 }

@@ -40,6 +40,10 @@ func ProcessExpiredBillings() {
 	}
 
 	for _, billing := range billings {
+
+		if billing.IsLoss {
+			continue
+		}
 		fmt.Printf("Mematikan device: %s (%s)\n ID: %d\n Status: %v\n", billing.Device.Name, billing.Device.IP, billing.ID, billing.IsActive)
 
 		billing.IsActive = false

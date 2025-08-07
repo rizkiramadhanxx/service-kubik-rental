@@ -392,7 +392,6 @@ func AddCartItem(c *fiber.Ctx) error {
 		ProductID:  input.ProductID,
 		BillingID:  input.BillingID,
 		Qty:        input.Qty,
-		Duration:   input.Duration,
 		Price:      price,
 		CreatedAt:  time.Now(),
 		TotalPrice: totalPrice,
@@ -453,7 +452,6 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 	if notFound && (input.Action == "increment" || input.Action == "set") {
 		var price int
 		var totalPrice int
-		var duration *int
 
 		if input.ItemType == "product" && input.ProductID != nil {
 			var product entity.Product
@@ -488,13 +486,11 @@ func UpdateCartItemQty(c *fiber.Ctx) error {
 				})
 			}
 			price = pkg.Package.Price
-			duration = &pkg.Package.Duration
 			cartItem = entity.CartItem{
 				CartID:     input.CartID,
 				ItemType:   input.ItemType,
 				BillingID:  input.BillingID,
 				Qty:        1,
-				Duration:   duration,
 				Price:      price,
 				TotalPrice: price,
 				CreatedAt:  time.Now(),

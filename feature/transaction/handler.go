@@ -82,6 +82,15 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 
 		// Bangun detail transaksi dan proses stok
 		for _, item := range cart.CartItems {
+
+			if item.ItemType == "billing" && item.Billing != nil {
+				if item.Billing.IsLoss && item.Billing.EndTime == nil {
+					return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+						Status:  fiber.StatusBadRequest,
+						Message: fmt.Sprintf("Billing %s masih aktif (loss), tidak bisa checkout", item.Billing.Device.Name),
+					})
+				}
+			}
 			subtotal := item.Price * item.Qty
 			total += subtotal
 			typeSet[item.ItemType] = true
@@ -141,8 +150,18 @@ func CheckoutFromCart(c *fiber.Ctx) error {
 				if item.Billing != nil {
 					td.DeviceName = &item.Billing.Device.Name
 					td.StartTime = &item.Billing.StartTime
-					td.EndTime = &item.Billing.EndTime
-					td.Duration = item.Duration
+					td.EndTime = item.Billing.EndTime
+
+					// Hitung durasi menit
+					var end time.Time
+					if item.Billing.EndTime != nil {
+						end = *item.Billing.EndTime
+					} else {
+						end = time.Now()
+					}
+					durationMinutes := int(end.Sub(item.Billing.StartTime).Minutes())
+					td.Duration = &durationMinutes
+
 					if item.Billing.Package.ID != 0 {
 						td.PackageName = &item.Billing.Package.Name
 					}

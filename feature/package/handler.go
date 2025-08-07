@@ -7,6 +7,7 @@ import (
 	"kubik-rental/pkg"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -70,6 +71,7 @@ func GetAllPackages(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 	keyword := c.Query("keyword", "")
+	typePackage := strings.ToLower(strings.TrimSpace(c.Query("type", ""))) // bisa: loss, regular, all, null, ""
 
 	if page < 1 {
 		page = 1
@@ -79,17 +81,45 @@ func GetAllPackages(c *fiber.Ctx) error {
 	}
 	offset := (page - 1) * limit
 
+	// Base query dengan keyword
+	query := config.DB.Model(&entity.Package{}).
+		Where("name LIKE ?", "%"+keyword+"%")
+
+	// Tambahkan filter type jika diperlukan
+	switch typePackage {
+	case "", "null", "all":
+		// Tidak menambah filter, semua data ditampilkan
+	case "loss":
+		query = query.Where("is_loss = ?", true)
+	case "regular":
+		query = query.Where("is_loss = ?", false)
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "Invalid type filter, must be 'loss', 'regular', or empty",
+		})
+	}
+
+	// Hitung total data
 	var total int64
-	if err := config.DB.Model(&entity.Package{}).Where("name LIKE ?", "%"+keyword+"%").Count(&total).Error; err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{Message: "Failed to count packages", Status: fiber.StatusBadRequest})
+	if err := query.Count(&total).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to count packages",
+		})
 	}
 
+	// Ambil data dengan limit & offset
 	var packages []entity.Package
-	if err := config.DB.Limit(limit).Offset(offset).Where("name LIKE ?", "%"+keyword+"%").Find(&packages).Error; err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(dto.Response[any]{Message: err.Error(), Status: fiber.StatusBadRequest})
+	if err := query.Limit(limit).Offset(offset).Order("created_at DESC").Find(&packages).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.Response[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "Failed to retrieve packages",
+		})
 	}
 
-	result := make([]PackageResponse, 0)
+	// Transform ke response
+	result := make([]PackageResponse, 0, len(packages))
 	for _, p := range packages {
 		result = append(result, PackageResponse{
 			ID:        p.ID,
@@ -109,7 +139,12 @@ func GetAllPackages(c *fiber.Ctx) error {
 		TotalPage: int(math.Ceil(float64(total) / float64(limit))),
 	}
 
-	return c.Status(fiber.StatusOK).JSON(dto.Response[[]PackageResponse]{Message: "Packages retrieved successfully", Status: fiber.StatusOK, Data: result, Meta: &meta})
+	return c.Status(fiber.StatusOK).JSON(dto.Response[[]PackageResponse]{
+		Message: "Packages retrieved successfully",
+		Status:  fiber.StatusOK,
+		Data:    result,
+		Meta:    &meta,
+	})
 }
 
 func UpdatePackage(c *fiber.Ctx) error {

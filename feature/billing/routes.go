@@ -15,6 +15,6 @@ func SetupRoutes(router fiber.Router) {
 
 	route.Post("/", CreateBillingAndInsertToCartHandler)
 	// loss billing
-	route.Get("/stop-billing", StopLossBilling)
+	route.Post("/stop-billing/:id", StopLossBilling)
 
 }
