@@ -17,6 +17,7 @@ import (
 	"kubik-rental/feature/category"
 	"kubik-rental/feature/device"
 	"kubik-rental/feature/member"
+	"kubik-rental/feature/migration"
 	package_bill "kubik-rental/feature/package"
 	"kubik-rental/feature/product"
 	"kubik-rental/feature/role"
@@ -74,6 +75,7 @@ func main() {
 	cart.SetupRoutes(app.Group("/cart"))
 	billing.SetupRoutes(app.Group("/billing"))
 	transaction.SetupRoutes(app.Group("/transaction"))
+	migration.SetupRoutes(app.Group("/migration"))
 
 	app.Get("/health-check", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
