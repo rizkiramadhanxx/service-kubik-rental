@@ -145,7 +145,7 @@ func StopLossBilling(c *fiber.Ctx) error {
 
 	// 1. Ambil billing + preload package
 	var billing entity.Billing
-	if err := config.DB.Preload("Package").First(&billing, id).Error; err != nil {
+	if err := config.DB.Preload("Package").Preload("Device").First(&billing, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(dto.Response[any]{
 				Status:  fiber.StatusNotFound,
